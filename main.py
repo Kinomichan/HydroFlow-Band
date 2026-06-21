@@ -181,8 +181,8 @@ fb_buf = bytearray(buf_size)
 fb = framebuf.FrameBuffer(fb_buf, width, height, framebuf.RGB565)
 
 # 4. Initialize GSR sensor connection pin (ADC)
-# The analog signal (SIG/SDA) on M5StickS3 Grove port (Port A) is connected to GPIO 1.
-adc_pin = Pin(1, Pin.IN)
+# The analog signal (SIG/SDA) on M5StickS3 Grove port (Port A) is connected to GPIO 9.
+adc_pin = Pin(9, Pin.IN)
 adc = ADC(adc_pin)
 adc.atten(ADC.ATTN_11DB)
 
@@ -239,9 +239,10 @@ while True:
         raw_avg = raw_sum / count
         voltage_mv = (uv_sum / count) / 1000.0  # Convert to millivolts
         
-        # Apply official Seeed Studio Grove GSR formula (designed for 10-bit ADC)
-        # Downsample the 12-bit ADC reading to 10-bit (0 to 1023)
-        adc_10bit = int(raw_avg) >> 2
+        # Apply official Seeed Studio Grove GSR formula (designed for 10-bit ADC on 5V scale)
+        # Convert the calibrated millivolts to 10-bit Arduino ADC reading (0-5.0V)
+        # Formula: (voltage_mv / 5000.0) * 1023
+        adc_10bit = int(voltage_mv * 1023 / 5000.0)
         
         # Formula: ((1024 + 2 * ADC_Value) * 10000) / (512 - ADC_Value)
         # Skip calculation if the denominator is 0 or negative (extremely low resistance or not connected)
