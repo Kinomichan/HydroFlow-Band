@@ -421,7 +421,33 @@ def connect_wifi_and_sync_time():
 # Connect to WiFi and synchronize time
 connect_wifi_and_sync_time()
 
-LOG_FILE = "gsr_readings.log"
+def generate_log_filename():
+    now = rtc.datetime()
+    # now format: (year, month, day, weekday, hour, minute, second, subsecond)
+    timestamp = "{:04d}{:02d}{:02d}_{:02d}{:02d}{:02d}".format(
+        now[0], now[1], now[2], now[4], now[5], now[6]
+    )
+    
+    base_name = "gsr_{}".format(timestamp)
+    ext = ".log"
+    filename = base_name + ext
+    
+    # Avoid duplicate filenames in case of rapid restarts or RTC reset to default (e.g. 2000-01-01)
+    counter = 1
+    while True:
+        try:
+            os.stat(filename)
+            # File exists, increment suffix
+            filename = "{}_{}{}".format(base_name, counter, ext)
+            counter += 1
+        except OSError:
+            # File does not exist, safe to use
+            break
+            
+    return filename
+
+LOG_FILE = generate_log_filename()
+print("Logging to file:", LOG_FILE)
 MAX_LOG_SIZE = 100 * 1024  # 100 KB
 
 def log_to_file(line):
@@ -430,12 +456,13 @@ def log_to_file(line):
         try:
             stat = os.stat(LOG_FILE)
             if stat[6] > MAX_LOG_SIZE:
+                bak_file = LOG_FILE + ".bak"
                 try:
-                    os.remove(LOG_FILE + ".bak")
+                    os.remove(bak_file)
                 except OSError:
                     pass
-                os.rename(LOG_FILE, LOG_FILE + ".bak")
-                print("[Info] Log file rotated.")
+                os.rename(LOG_FILE, bak_file)
+                print("[Info] Log file rotated to", bak_file)
         except OSError:
             # File doesn't exist yet
             pass
@@ -451,6 +478,12 @@ print("Timestamp | RawVal | Voltage(mV) | Skin_Resistance(kOhm) | Samples")
 
 # Wait a moment for stabilization
 time.sleep(1.0)
+
+# Accumulation variables for 10-second averages
+accum_raw_sum = 0
+accum_uv_sum = 0
+accum_count = 0
+loop_count = 0
 
 while True:
     try:
@@ -499,41 +532,62 @@ while True:
             # 10ms sampling interval (approx. 100 samples per second)
             time.sleep_ms(10)
             
-        raw_avg = raw_sum / count
-        voltage_mv = (uv_sum / count) / 1000.0  # Convert to millivolts
+        # Calculate 1-second average for display purposes
+        raw_avg_1s = raw_sum / count
+        voltage_mv_1s = (uv_sum / count) / 1000.0  # Convert to millivolts
         
-        # Apply official Seeed Studio Grove GSR formula (designed for 10-bit ADC on 5V scale)
-        # Convert the calibrated millivolts to 10-bit Arduino ADC reading (0-5.0V)
-        # Formula: (voltage_mv / 5000.0) * 1023
-        adc_10bit = int(voltage_mv * 1023 / 5000.0)
-        
-        # Formula: ((1024 + 2 * ADC_Value) * 10000) / (512 - ADC_Value)
-        # Skip calculation if the denominator is 0 or negative (extremely low resistance or not connected)
-        denominator = 512 - adc_10bit
-        if denominator > 0:
-            resistance = ((1024 + 2 * adc_10bit) * 10000) / denominator
-            resistance_k = resistance / 1000.0  # Convert to kOhm
-            res_str = "{:.1f}k".format(resistance_k)
-            log_res_str = "{:.2f} kOhm".format(resistance_k)
+        # Apply official Seeed Studio Grove GSR formula for display
+        adc_10bit_1s = int(voltage_mv_1s * 1023 / 5000.0)
+        denominator_1s = 512 - adc_10bit_1s
+        if denominator_1s > 0:
+            resistance_1s = ((1024 + 2 * adc_10bit_1s) * 10000) / denominator_1s
+            resistance_k_1s = resistance_1s / 1000.0
+            res_str = "{:.1f}k".format(resistance_k_1s)
             connected = True
         else:
-            # Resistance is beyond measurement limit or fingers are not in contact
             res_str = "---"
-            log_res_str = "Out of Range (No Contact)"
             connected = False
             
+        # Accumulate for 10-second logging
+        accum_raw_sum += raw_sum
+        accum_uv_sum += uv_sum
+        accum_count += count
+        loop_count += 1
+        
+        # Log to file every 10 seconds
+        if loop_count >= 10:
+            raw_avg_10s = accum_raw_sum / accum_count
+            voltage_mv_10s = (accum_uv_sum / accum_count) / 1000.0
+            
+            adc_10bit_10s = int(voltage_mv_10s * 1023 / 5000.0)
+            denominator_10s = 512 - adc_10bit_10s
+            if denominator_10s > 0:
+                resistance_10s = ((1024 + 2 * adc_10bit_10s) * 10000) / denominator_10s
+                resistance_k_10s = resistance_10s / 1000.0
+                log_res_str = "{:.2f} kOhm".format(resistance_k_10s)
+            else:
+                log_res_str = "Out of Range (No Contact)"
+                
+            now = rtc.datetime()
+            timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
+                now[0], now[1], now[2], now[4], now[5], now[6]
+            )
+            
+            log_line = "[{}] Raw: {:4.1f} | Voltage: {:.2f} mV | Resistance: {} | Samples: {}".format(
+                timestamp, raw_avg_10s, voltage_mv_10s, log_res_str, accum_count
+            )
+            print("[Log] " + log_line)
+            log_to_file(log_line)
+            
+            # Reset accumulation variables
+            accum_raw_sum = 0
+            accum_uv_sum = 0
+            accum_count = 0
+            loop_count = 0
+            
         now = rtc.datetime()
-        timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
-            now[0], now[1], now[2], now[4], now[5], now[6]
-        )
         time_str = "{:02d}:{:02d}:{:02d}".format(now[4], now[5], now[6])
         date_str = "{:04d}-{:02d}-{:02d}".format(now[0], now[1], now[2])
-        
-        log_line = "[{}] Raw: {:4.1f} | Voltage: {:.2f} mV | Resistance: {} | Samples: {}".format(
-            timestamp, raw_avg, voltage_mv, log_res_str, count
-        )
-        print(log_line)
-        log_to_file(log_line)
         
         # ==========================================
         # Render UI onto the frame buffer
@@ -549,7 +603,7 @@ while True:
             
             # 1. Raw Value Section
             fb.text("RAW VALUE", 31, 35, 0x8410)   # Grey label
-            raw_val_str = "{:d}".format(int(raw_avg))
+            raw_val_str = "{:d}".format(int(raw_avg_1s))
             raw_len = len(raw_val_str)
             # Choose scale 4 if value fits, otherwise scale 3
             raw_scale = 4 if raw_len <= 4 else 3
