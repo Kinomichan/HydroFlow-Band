@@ -18,6 +18,7 @@ M5StickS3 の Grove ポート (Port A) に GSR センサーを接続します。
 
 * **[main.py](file:///home/karube/GitHub/M5StickS3/main.py)**: M5StickS3 起動時に自動実行されるメインプログラム。PMICの初期化、LCD電源・バックライトの有効化、TFT初期化、1秒間隔の高速GSRサンプリング、測定結果のリアルタイムUI描画、ログファイルへの追記を行います。
 * **[gsr_reader.py](file:///home/karube/GitHub/M5StickS3/gsr_reader.py)**: `main.py` と同内容のバックアップコード。
+* **[wifi_config.json](file:///home/karube/GitHub/M5StickS3/wifi_config.json)**: WiFi接続情報（SSID、パスワード）およびタイムゾーン（timezone_offset_hours）を設定するJSON形式の設定ファイル。
 * **[sync.py](file:///home/karube/GitHub/M5StickS3/sync.py)**: 開発PCから M5StickS3 にソースファイルを書き込み、同期するための自動化スクリプト。
 * **[pull_logs.py](file:///home/karube/GitHub/M5StickS3/pull_logs.py)**: M5StickS3 の内蔵フラッシュからログファイル（`*.log`, `*.log.bak`）を PC に吸い上げるためのホスト用スクリプト。タイムスタンプを自動付与して保存し、デバイス側の領域解放（消去）も行えます。
 
@@ -89,7 +90,21 @@ M5StickS3 の内蔵フラッシュに蓄積された測定ログファイル (`*
 
 ---
 
-## 6. 画面消灯と省電力モード（トグル機能）
+## 6. 起動時の WiFi 接続と NTP 時刻同期
+
+M5StickS3 起動時に WiFi ネットワークへ一時的に接続し、NTP（Network Time Protocol）を用いて内蔵 RTC の時刻合わせを自動で行います。
+
+* **動作フロー**:
+  1. `wifi_config.json` から接続設定を読み込みます。
+  2. 設定された SSID に WiFi 接続します（画面に接続ステータスを表示）。
+  3. NTP サーバーから現在の協定世界時（UTC）を取得し、設定された `timezone_offset_hours`（日本時間なら `9`、米国太平洋夏時間なら `-7`）を加味して RTC 時刻を設定します。
+  4. 時刻の同期完了後、直ちに WiFi 接続を切断（`wlan.disconnect()`, `wlan.active(False)`）し、省電力化を図ります。
+  5. メインの GSR 測定および画面描画ループに移行します。
+* **注意**: WiFi の SSID またはパスワードが未設定の場合、あるいは `YOUR_WIFI_SSID` のままの場合は、WiFi 接続と NTP 同期は自動的にスキップされ、即座に GSR 測定を開始します。
+
+---
+
+## 7. 画面消灯と省電力モード（トグル機能）
 
 本プロジェクトは、KEY1（本体正面のM5ボタン）または Power Button（本体左側面の電源ボタン）を短く押すことで、画面を消灯し、マイコンを省電力状態に移行させることができます。
 
@@ -107,7 +122,7 @@ M5StickS3 の内蔵フラッシュに蓄積された測定ログファイル (`*
 
 ---
 
-## 7. トラブルシューティング
+## 8. トラブルシューティング
 
 ### エラー: `Failed to connect. The port is currently in use`
 Thonny IDE などの他のプログラムが `/dev/ttyACM0` への接続を開きっぱなしにしている可能性があります。

@@ -250,6 +250,177 @@ adc.atten(ADC.ATTN_11DB)
 # Initialize RTC
 rtc = RTC()
 
+def show_sync_status(title, lines):
+    # Clear screen with pure black
+    fb.fill(0x0000)
+    
+    # Header bar
+    fb.fill_rect(0, 0, width, 24, 0x9000) # Dark red / crimson background
+    fb.text(title, (width - len(title) * 8) // 2, 8, 0xFFFF)
+    fb.line(0, 24, width, 24, 0xC618)
+    
+    # Draw each line of status text
+    y = 40
+    for text in lines:
+        fb.text(text, 10, y, 0xFFFF)
+        y += 20
+        
+    # Push to display
+    swap_bytes(fb_buf, buf_size)
+    set_window(0, 0, width - 1, height - 1)
+    dc.on()
+    cs.off()
+    spi.write(fb_buf)
+    cs.on()
+
+def connect_wifi_and_sync_time():
+    import json
+    import network
+    import ntptime
+    
+    show_sync_status("WIFI CONNECT", ["Loading config..."])
+    
+    try:
+        with open("wifi_config.json", "r") as f:
+            config = json.load(f)
+    except Exception as e:
+        print("Failed to load wifi_config.json:", e)
+        show_sync_status("CONFIG ERROR", [
+            "wifi_config.json",
+            "not found or",
+            "invalid.",
+            "Skipping sync."
+        ])
+        time.sleep(2.0)
+        return
+        
+    ssid = config.get("ssid", "")
+    password = config.get("password", "")
+    timezone_offset_hours = config.get("timezone_offset_hours", 0)
+    
+    if ssid == "YOUR_WIFI_SSID" or not ssid:
+        print("SSID is not configured. Skipping WiFi/NTP sync.")
+        show_sync_status("WIFI SKIP", [
+            "SSID not configured",
+            "in wifi_config.json",
+            "Skipping sync."
+        ])
+        time.sleep(2.0)
+        return
+        
+    show_sync_status("WIFI CONNECT", [
+        "SSID:",
+        "  " + ssid[:12] + ("..." if len(ssid) > 12 else ""),
+        "Status:",
+        "  Connecting..."
+    ])
+    
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(ssid, password)
+    
+    # Wait up to 15 seconds for connection
+    connected = False
+    for i in range(15):
+        if wlan.isconnected():
+            connected = True
+            break
+        time.sleep(1.0)
+        show_sync_status("WIFI CONNECT", [
+            "SSID:",
+            "  " + ssid[:12] + ("..." if len(ssid) > 12 else ""),
+            "Status:",
+            "  Connecting" + "." * (i % 4 + 1)
+        ])
+        
+    if not connected:
+        print("WiFi connection failed.")
+        show_sync_status("WIFI FAIL", [
+            "SSID:",
+            "  " + ssid[:12] + ("..." if len(ssid) > 12 else ""),
+            "Status:",
+            "  Connection Failed!",
+            "Proceeding..."
+        ])
+        wlan.active(False)
+        time.sleep(2.0)
+        return
+        
+    ip = wlan.ifconfig()[0]
+    print("WiFi connected! IP:", ip)
+    show_sync_status("NTP SYNC", [
+        "WiFi: Connected",
+        "IP: " + ip,
+        "NTP Syncing..."
+    ])
+    
+    # Try to synchronize time
+    sync_success = False
+    for attempt in range(3):
+        try:
+            ntp_host = config.get("ntp_host", "pool.ntp.org")
+            ntptime.host = ntp_host
+            ntptime.settime()
+            sync_success = True
+            break
+        except Exception as e:
+            print("NTP sync attempt {} failed: {}".format(attempt + 1, e))
+            time.sleep(1.0)
+            
+    if sync_success:
+        try:
+            utc_epoch = time.time()
+            local_epoch = utc_epoch + int(timezone_offset_hours * 3600)
+            tm = time.localtime(local_epoch)
+            rtc.datetime((tm[0], tm[1], tm[2], tm[6], tm[3], tm[4], tm[5], 0))
+            
+            now_dt = rtc.datetime()
+            time_str = "{:02d}:{:02d}:{:02d}".format(now_dt[4], now_dt[5], now_dt[6])
+            print("NTP Sync Success! Time set to:", time_str)
+            show_sync_status("SYNC SUCCESS", [
+                "NTP Sync: OK",
+                "Time Set:",
+                "  " + time_str,
+                "Saving power..."
+            ])
+        except Exception as e:
+            print("Failed to set local time:", e)
+            show_sync_status("SYNC ERROR", [
+                "NTP Sync: OK",
+                "Failed to set",
+                "local timezone!"
+            ])
+    else:
+        print("NTP sync failed.")
+        show_sync_status("SYNC FAIL", [
+            "WiFi: Connected",
+            "NTP Sync: Failed!",
+            "Proceeding..."
+        ])
+        
+    time.sleep(1.5)
+    
+    print("Disconnecting WiFi to save power...")
+    show_sync_status("WIFI CLOSE", [
+        "Disconnecting WiFi",
+        "to save power..."
+    ])
+    try:
+        wlan.disconnect()
+        wlan.active(False)
+    except Exception as e:
+        print("Failed to disable WLAN interface:", e)
+        
+    show_sync_status("WIFI CLOSE", [
+        "WiFi Interface OFF",
+        "Power Saved.",
+        "Starting GSR..."
+    ])
+    time.sleep(1.0)
+
+# Connect to WiFi and synchronize time
+connect_wifi_and_sync_time()
+
 LOG_FILE = "gsr_readings.log"
 MAX_LOG_SIZE = 100 * 1024  # 100 KB
 
