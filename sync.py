@@ -7,13 +7,14 @@ import argparse
 # Default port
 DEFAULT_PORT = "/dev/ttyACM0"
 
-# List of files/directories to ignore
 IGNORE_PATTERNS = {
     ".git",
     ".venv",
     ".antigravitycli",
     ".gitignore",
     "sync.py",
+    "pull_logs.py",
+    "downloaded_logs",
     "__pycache__",
     ".DS_Store",
     ".vscode",

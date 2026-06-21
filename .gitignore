@@ -2,3 +2,6 @@
 .antigravitycli/
 __pycache__/
 *.pyc
+downloaded_logs/
+*.log
+*.log.bak
