@@ -181,8 +181,8 @@ fb_buf = bytearray(buf_size)
 fb = framebuf.FrameBuffer(fb_buf, width, height, framebuf.RGB565)
 
 # 4. Initialize GSR sensor connection pin (ADC)
-# The analog signal (SIG/SDA) on M5StickS3 Grove port (Port A) is connected to GPIO 9.
-adc_pin = Pin(9, Pin.IN)
+# The analog signal (SIG) on M5StickS3 Grove port (Port A) is connected to SCL (GPIO 10 / Yellow wire).
+adc_pin = Pin(10, Pin.IN)
 adc = ADC(adc_pin)
 adc.atten(ADC.ATTN_11DB)
 
