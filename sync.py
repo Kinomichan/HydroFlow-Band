@@ -21,20 +21,22 @@ IGNORE_PATTERNS = {
     ".idea",
 }
 
-def should_ignore(path):
+def should_ignore(path, mirror_all=False):
     parts = path.split(os.sep)
     for part in parts:
-        if part in IGNORE_PATTERNS or part.startswith(".") or part.endswith(".log") or part.endswith(".bak"):
+        if part in IGNORE_PATTERNS or part.startswith("."):
+            return True
+        if not mirror_all and (part.endswith(".log") or part.endswith(".bak")):
             return True
     return False
 
-def get_sync_items():
+def get_sync_items(mirror_all=False):
     dirs_to_create = []
     files_to_copy = []
     
     for root, dirs, files in os.walk("."):
         # Remove ignored directories in-place so os.walk doesn't traverse them
-        dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d))]
+        dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), mirror_all)]
         
         rel_root = os.path.relpath(root, ".")
         if rel_root != ".":
@@ -42,7 +44,7 @@ def get_sync_items():
             
         for file in files:
             rel_file = os.path.relpath(os.path.join(root, file), ".")
-            if not should_ignore(rel_file):
+            if not should_ignore(rel_file, mirror_all):
                 files_to_copy.append(rel_file.replace(os.sep, "/"))
                 
     return sorted(dirs_to_create), sorted(files_to_copy)
@@ -101,17 +103,20 @@ def main():
     parser.add_argument("-p", "--port", default=DEFAULT_PORT, help=f"Serial port of M5StickS3 (default: {DEFAULT_PORT})")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt")
     parser.add_argument("-c", "--clean", action="store_true", help="Delete files on device that do not exist locally (mirroring)")
+    parser.add_argument("-m", "--mirror-all", action="store_true", help="Completely mirror all files including .log and .bak (except boot.py)")
     args = parser.parse_args()
 
+    clean_mode = args.clean or args.mirror_all
+
     # Find files to sync
-    dirs, files = get_sync_items()
+    dirs, files = get_sync_items(args.mirror_all)
     
     # 1. Retrieve remote files if clean option is requested
     remote_items = []
     files_to_delete = []
     dirs_to_delete = []
     
-    if args.clean:
+    if clean_mode:
         print("Scanning files on M5StickS3...")
         # Recursive walk snippet
         py_code = (
@@ -147,6 +152,11 @@ def main():
             if r_path == "boot.py" and "boot.py" not in files:
                 continue
             
+            # If not in mirror-all mode, protect .log and .bak files on the device from deletion
+            if not args.mirror_all:
+                if r_path.endswith(".log") or r_path.endswith(".bak"):
+                    continue
+            
             if is_dir:
                 if r_path not in dirs:
                     dirs_to_delete.append(r_path)
@@ -171,7 +181,7 @@ def main():
         for f in files:
             print(f"    -> {f}")
             
-    if args.clean and (files_to_delete or dirs_to_delete):
+    if clean_mode and (files_to_delete or dirs_to_delete):
         print("\nFiles/folders to delete from M5StickS3 (Mirroring):")
         if dirs_to_delete:
             for d in dirs_to_delete:
@@ -187,14 +197,14 @@ def main():
             return
 
     # Delete remote files first
-    if args.clean and files_to_delete:
+    if clean_mode and files_to_delete:
         print("\nDeleting remote files...")
         for f in files_to_delete:
             print(f"  Deleting {f}...")
             run_mpremote(args.port, ["rm", f":{f}"])
 
     # Delete remote directories
-    if args.clean and dirs_to_delete:
+    if clean_mode and dirs_to_delete:
         print("\nDeleting remote directories...")
         for d in dirs_to_delete:
             print(f"  Deleting folder {d}/...")
