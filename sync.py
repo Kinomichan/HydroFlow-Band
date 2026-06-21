@@ -23,7 +23,7 @@ IGNORE_PATTERNS = {
 def should_ignore(path):
     parts = path.split(os.sep)
     for part in parts:
-        if part in IGNORE_PATTERNS or part.startswith("."):
+        if part in IGNORE_PATTERNS or part.startswith(".") or part.endswith(".log") or part.endswith(".bak"):
             return True
     return False
 
