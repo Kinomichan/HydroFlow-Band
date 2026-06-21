@@ -243,7 +243,7 @@ def main():
     # Synchronize device clock with PC
     print("\nSynchronizing device RTC with host PC time...")
     try:
-        run_mpremote(args.port, ["rtc"])
+        run_mpremote(args.port, ["rtc", "--set"])
         print("RTC synchronized successfully.")
     except Exception as e:
         print(f"Warning: Could not sync RTC: {e}")
