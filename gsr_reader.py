@@ -74,12 +74,64 @@ def enable_lcd_power():
         print("Failed to enable PMIC LCD power:", e)
         return False
 
+def disable_lcd_power():
+    """
+    Disables the LCD power rail by setting PMIC GPIO2 to LOW.
+    """
+    try:
+        # Set bit 2 of register 0x11 (Set GPIO2 output LOW to disable LCD power rail)
+        val = internal_i2c.readfrom_mem(PMIC_ADDR, 0x11, 1)[0]
+        val &= ~(1 << 2)
+        internal_i2c.writeto_mem(PMIC_ADDR, 0x11, bytes([val]))
+        print("PMIC LCD power rail disabled.")
+        return True
+    except Exception as e:
+        print("Failed to disable PMIC LCD power:", e)
+        return False
+
+def setup_power_button():
+    """
+    Configures the PMIC to disable hardware reset on single-click
+    and power-off on double-click, allowing BtnPWR to be used as a user button.
+    """
+    try:
+        # Disable single-click reset (set Bit 0 of Reg 0x49)
+        val = internal_i2c.readfrom_mem(PMIC_ADDR, 0x49, 1)[0]
+        val |= 0x01
+        internal_i2c.writeto_mem(PMIC_ADDR, 0x49, bytes([val]))
+        
+        # Disable double-click shutdown (set Bit 0 of Reg 0x4A)
+        val2 = internal_i2c.readfrom_mem(PMIC_ADDR, 0x4A, 1)[0]
+        val2 |= 0x01
+        internal_i2c.writeto_mem(PMIC_ADDR, 0x4A, bytes([val2]))
+        
+        print("PMIC Power Button configured as user input.")
+        return True
+    except Exception as e:
+        print("Failed to configure PMIC Power Button:", e)
+        return False
+
+def is_power_button_pressed():
+    """
+    Reads the PMIC register 0x48 to check if the Power Button is currently pressed.
+    Bit 0: BTN_STATE (1=Pressed, 0=Released)
+    """
+    try:
+        val = internal_i2c.readfrom_mem(PMIC_ADDR, 0x48, 1)[0]
+        return (val & 0x01) == 0x01
+    except Exception:
+        return False
+
 # Start power delivery
 if not enable_grove_5v():
     print("Warning: Could not enable Grove 5V. Sensor might not power up.")
 
 if not enable_lcd_power():
     print("Warning: Could not enable LCD power rail. Display might remain blank.")
+
+# Configure Power Button to act as user button instead of hardware reset/shutdown
+setup_power_button()
+
 time.sleep_ms(100)
 
 # 2. Turn on display backlight (GPIO 38 controls backlight on M5StickS3)
@@ -93,12 +145,6 @@ cs = Pin(41, Pin.OUT, value=1)
 dc = Pin(45, Pin.OUT, value=0)
 rst = Pin(21, Pin.OUT, value=1)
 
-# Reset display controller
-rst.off()
-time.sleep_ms(50)
-rst.on()
-time.sleep_ms(150)
-
 def write_cmd(cmd):
     dc.off()
     cs.off()
@@ -111,30 +157,40 @@ def write_data(data):
     spi.write(data)
     cs.on()
 
-# ST7789 display controller initialization commands
-write_cmd(0x01) # SWRESET (Software reset)
-time.sleep_ms(150)
-write_cmd(0x11) # SLPOUT (Sleep out)
-time.sleep_ms(120)
+def init_lcd():
+    # Reset display controller
+    rst.off()
+    time.sleep_ms(50)
+    rst.on()
+    time.sleep_ms(150)
 
-# COLMOD: Interface Pixel Format (0x3A) -> set to 16-bit color (0x55)
-write_cmd(0x3A)
-write_data(bytes([0x55]))
+    # ST7789 display controller initialization commands
+    write_cmd(0x01) # SWRESET (Software reset)
+    time.sleep_ms(150)
+    write_cmd(0x11) # SLPOUT (Sleep out)
+    time.sleep_ms(120)
 
-# MADCTL: Memory Data Access Control (0x36) -> BGR color order filter (0x08)
-write_cmd(0x36)
-write_data(bytes([0x08]))
+    # COLMOD: Interface Pixel Format (0x3A) -> set to 16-bit color (0x55)
+    write_cmd(0x3A)
+    write_data(bytes([0x55]))
 
-# INVON: Display Inversion On (0x21) -> required for colors to display correctly
-write_cmd(0x21)
+    # MADCTL: Memory Data Access Control (0x36) -> BGR color order filter (0x08)
+    write_cmd(0x36)
+    write_data(bytes([0x08]))
 
-# NORON: Normal Display Mode On (0x13)
-write_cmd(0x13)
-time.sleep_ms(10)
+    # INVON: Display Inversion On (0x21) -> required for colors to display correctly
+    write_cmd(0x21)
 
-# DISPON: Display On (0x29)
-write_cmd(0x29)
-time.sleep_ms(100)
+    # NORON: Normal Display Mode On (0x13)
+    write_cmd(0x13)
+    time.sleep_ms(10)
+
+    # DISPON: Display On (0x29)
+    write_cmd(0x29)
+    time.sleep_ms(100)
+
+# Initialize display controller
+init_lcd()
 
 # LCD dimensions and offsets
 width = 135
@@ -179,6 +235,11 @@ def draw_large_text(fb_target, text, x, y, scale, color):
 buf_size = width * height * 2
 fb_buf = bytearray(buf_size)
 fb = framebuf.FrameBuffer(fb_buf, width, height, framebuf.RGB565)
+
+# 3.5. Initialize KEY1 button (GPIO 11) for display power toggle control
+btn = Pin(11, Pin.IN, Pin.PULL_UP)
+display_on = True
+last_btn_press = 0
 
 # 4. Initialize GSR sensor connection pin (ADC)
 # The analog signal (SIG) on M5StickS3 Grove port (Port A) is connected to SCL (GPIO 10 / Yellow wire).
@@ -233,6 +294,37 @@ while True:
             # read_uv() returns internal calibrated voltage in microvolts
             uv_sum += adc.read_uv()
             count += 1
+            
+            # Check KEY1 press or Power Button press
+            btn_pressed = False
+            if btn.value() == 0:
+                btn_pressed = True
+            elif is_power_button_pressed():
+                btn_pressed = True
+                
+            if btn_pressed:
+                now_ms = time.ticks_ms()
+                if time.ticks_diff(now_ms, last_btn_press) > 300:
+                    last_btn_press = now_ms
+                    display_on = not display_on
+                    if display_on:
+                        print("[System] Turning display ON (Normal Mode)...")
+                        enable_lcd_power()
+                        time.sleep_ms(50)
+                        init_lcd()
+                        bl.on()
+                        print("[System] Display ON complete.")
+                    else:
+                        print("[System] Turning display OFF (Power Saving Mode)...")
+                        bl.off()
+                        try:
+                            write_cmd(0x28) # Display Off
+                            write_cmd(0x10) # Sleep In
+                        except Exception as e:
+                            print("[System] Failed display sleep cmd:", e)
+                        disable_lcd_power()
+                        print("[System] Display OFF complete.")
+            
             # 10ms sampling interval (approx. 100 samples per second)
             time.sleep_ms(10)
             
@@ -275,56 +367,57 @@ while True:
         # ==========================================
         # Render UI onto the frame buffer
         # ==========================================
-        # Clear screen with pure black
-        fb.fill(0x0000)
-        
-        # Header bar
-        fb.fill_rect(0, 0, width, 24, 0x9000) # Dark red / crimson background
-        fb.text("GSR MONITOR", 23, 8, 0xFFFF)  # Centered title
-        fb.line(0, 24, width, 24, 0xC618)      # Light grey separator line
-        
-        # 1. Raw Value Section
-        fb.text("RAW VALUE", 31, 35, 0x8410)   # Grey label
-        raw_val_str = "{:d}".format(int(raw_avg))
-        raw_len = len(raw_val_str)
-        # Choose scale 4 if value fits, otherwise scale 3
-        raw_scale = 4 if raw_len <= 4 else 3
-        raw_w = raw_len * 8 * raw_scale
-        raw_x = (width - raw_w) // 2
-        # Color coding: Green if contact is detected, Orange if disconnected
-        raw_color = 0x07E0 if connected else 0xFD20
-        draw_large_text(fb, raw_val_str, raw_x, 50, raw_scale, raw_color)
-        
-        # Connection status badge
-        if connected:
-            fb.fill_rect(21, 90, 93, 14, 0x03E0)  # Dark green pill
-            fb.text("CONNECTED", 31, 93, 0xFFFF)
-        else:
-            fb.fill_rect(17, 90, 101, 14, 0x7800) # Dark red pill
-            fb.text("NO CONTACT", 27, 93, 0xFFFF)
+        if display_on:
+            # Clear screen with pure black
+            fb.fill(0x0000)
             
-        # 2. Skin Resistance Section
-        fb.text("RESISTANCE", 27, 120, 0x8410)  # Grey label
-        res_w = len(res_str) * 8 * 2
-        res_x = (width - res_w) // 2
-        draw_large_text(fb, res_str, res_x, 135, 2, 0xFFE0) # Yellow text
-        
-        # 3. Date & Time Section (Footer)
-        fb.line(0, 175, width, 175, 0x4208)    # Divider line
-        fb.text(date_str, 27, 185, 0x8410)      # Centered date in grey
-        # Large current time centered
-        draw_large_text(fb, time_str, 3, 200, 2, 0x07FF) # Centered time in cyan
-        
-        # ==========================================
-        # Push Frame Buffer to Display SPI
-        # ==========================================
-        swap_bytes(fb_buf, buf_size)            # Convert endianness
-        set_window(0, 0, width - 1, height - 1)
-        dc.on()
-        cs.off()
-        spi.write(fb_buf)
-        cs.on()
-        
+            # Header bar
+            fb.fill_rect(0, 0, width, 24, 0x9000) # Dark red / crimson background
+            fb.text("GSR MONITOR", 23, 8, 0xFFFF)  # Centered title
+            fb.line(0, 24, width, 24, 0xC618)      # Light grey separator line
+            
+            # 1. Raw Value Section
+            fb.text("RAW VALUE", 31, 35, 0x8410)   # Grey label
+            raw_val_str = "{:d}".format(int(raw_avg))
+            raw_len = len(raw_val_str)
+            # Choose scale 4 if value fits, otherwise scale 3
+            raw_scale = 4 if raw_len <= 4 else 3
+            raw_w = raw_len * 8 * raw_scale
+            raw_x = (width - raw_w) // 2
+            # Color coding: Green if contact is detected, Orange if disconnected
+            raw_color = 0x07E0 if connected else 0xFD20
+            draw_large_text(fb, raw_val_str, raw_x, 50, raw_scale, raw_color)
+            
+            # Connection status badge
+            if connected:
+                fb.fill_rect(21, 90, 93, 14, 0x03E0)  # Dark green pill
+                fb.text("CONNECTED", 31, 93, 0xFFFF)
+            else:
+                fb.fill_rect(17, 90, 101, 14, 0x7800) # Dark red pill
+                fb.text("NO CONTACT", 27, 93, 0xFFFF)
+                
+            # 2. Skin Resistance Section
+            fb.text("RESISTANCE", 27, 120, 0x8410)  # Grey label
+            res_w = len(res_str) * 8 * 2
+            res_x = (width - res_w) // 2
+            draw_large_text(fb, res_str, res_x, 135, 2, 0xFFE0) # Yellow text
+            
+            # 3. Date & Time Section (Footer)
+            fb.line(0, 175, width, 175, 0x4208)    # Divider line
+            fb.text(date_str, 27, 185, 0x8410)      # Centered date in grey
+            # Large current time centered
+            draw_large_text(fb, time_str, 3, 200, 2, 0x07FF) # Centered time in cyan
+            
+            # ==========================================
+            # Push Frame Buffer to Display SPI
+            # ==========================================
+            swap_bytes(fb_buf, buf_size)            # Convert endianness
+            set_window(0, 0, width - 1, height - 1)
+            dc.on()
+            cs.off()
+            spi.write(fb_buf)
+            cs.on()
+            
     except KeyboardInterrupt:
         print("\nProgram stopped by user.")
         break
