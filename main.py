@@ -161,14 +161,13 @@ def run_calibration():
         fb.rect(bar_x, bar_y, bar_w, bar_h, 0x18C3)
         fb.fill_rect(bar_x + 2, bar_y + 2, int((bar_w - 4) * progress_pct / 100), bar_h - 4, 0xFDA0)
         
-        raw_text = "RAW: {:d}".format(int(avg_raw))
-        fb.text(raw_text, (width - len(raw_text)*8)//2, 130, 0xC618)
+        # Display connection status and conductance during calibration (hiding raw values)
         if connected:
             res_text = "COND: {}".format(res_str)
-            fb.text(res_text, (width - len(res_text)*8)//2, 144, 0x07E0)
+            fb.text(res_text, (width - len(res_text)*8)//2, 137, 0x07E0)
         else:
             res_text = "NO CONTACT"
-            fb.text(res_text, (width - len(res_text)*8)//2, 144, 0xF800)
+            fb.text(res_text, (width - len(res_text)*8)//2, 137, 0xF800)
             
         fb.line(0, 175, width, 175, 0x4208)
         fb.text("KEEP STILL", 27, 185, 0xFDA0)
@@ -209,16 +208,14 @@ def run_calibration():
     fb.line(0, 24, width, 24, 0xC618)
     
     fb.rect(8, 36, width - 16, 128, 0x3186)
-    fb.text("BASELINE RAW:", 14, 48, 0x8410)
-    raw_res_str = "{:.1f}".format(baseline_raw)
-    fb.text(raw_res_str, (width - len(raw_res_str)*8)//2, 64, 0xFFFF)
     
-    fb.text("BASELINE COND:", 14, 88, 0x8410)
+    # Display baseline conductance only (hiding raw values)
+    fb.text("BASELINE COND:", (width - 14 * 8) // 2, 58, 0x8410)
     if baseline_cond_us is not None:
         res_val_str = "{:.2f} uS".format(baseline_cond_us)
-        fb.text(res_val_str, (width - len(res_val_str)*8)//2, 104, 0xFFFF)
+        draw_large_text(fb, res_val_str, (width - len(res_val_str) * 8 * 2) // 2, 78, 2, 0xFFFF)
     else:
-        fb.text("Out of Range", (width - 12*8)//2, 104, 0xF800)
+        fb.text("Out of Range", (width - 12 * 8) // 2, 78, 0xF800)
         
     fb.line(0, 175, width, 175, 0x4208)
     fb.text("STARTING LOG...", 11, 195, 0x07E0)
@@ -428,6 +425,7 @@ while True:
         else:
             res_str = "---"
             connected = False
+            conductance_us_1s = 0.0
             
         accum_raw_sum += raw_sum
         accum_uv_sum += uv_sum
@@ -473,38 +471,67 @@ while True:
         time_str = "{:02d}:{:02d}:{:02d}".format(now[4], now[5], now[6])
         date_str = "{:04d}-{:02d}-{:02d}".format(now[0], now[1], now[2])
         
+        # Calculate conductance difference from baseline
+        cond_diff_str = "---"
+        cond_diff_color = 0x8410
+        if connected and baseline_cond_us is not None:
+            cond_diff = conductance_us_1s - baseline_cond_us
+            cond_diff_str = "{:+.2f} uS".format(cond_diff)
+            if cond_diff > 0:
+                cond_diff_color = 0xFD20  # Orange/Red for increase (stress)
+            elif cond_diff < 0:
+                cond_diff_color = 0x07E0  # Green for decrease (relaxation)
+            else:
+                cond_diff_color = 0xFFFF  # White for no change
+        else:
+            cond_diff_str = "---"
+            cond_diff_color = 0x8410  # Gray
+
         if display_on:
             fb.fill(0x0000)
-            fb.fill_rect(0, 0, width, 24, 0x9000)
-            fb.text("GSR MONITOR", 23, 8, 0xFFFF)
+            
+            # Header: GSR Monitor title
+            fb.fill_rect(0, 0, width, 24, 0x18C3)  # Clean dark gray/blue
+            fb.text("GSR MONITOR", 23, 8, 0xFDA0)  # Orange
             fb.line(0, 24, width, 24, 0xC618)
             
-            fb.text("RAW VALUE", 31, 35, 0x8410)
-            raw_val_str = "{:d}".format(int(raw_avg_1s))
-            raw_len = len(raw_val_str)
-            raw_scale = 4 if raw_len <= 4 else 3
-            raw_w = raw_len * 8 * raw_scale
-            raw_x = (width - raw_w) // 2
-            raw_color = 0x07E0 if connected else 0xFD20
-            draw_large_text(fb, raw_val_str, raw_x, 50, raw_scale, raw_color)
-            
+            # Connection status bar (green when connected, red when no contact)
             if connected:
-                fb.fill_rect(21, 90, 93, 14, 0x03E0)
-                fb.text("CONNECTED", 31, 93, 0xFFFF)
+                fb.fill_rect(0, 25, width, 16, 0x03E0)
+                fb.text("CONNECTED", (width - 9 * 8) // 2, 29, 0xFFFF)
             else:
-                fb.fill_rect(17, 90, 101, 14, 0x7800)
-                fb.text("NO CONTACT", 27, 93, 0xFFFF)
+                fb.fill_rect(0, 25, width, 16, 0x7800)
+                fb.text("NO CONTACT", (width - 10 * 8) // 2, 29, 0xFFFF)
                 
-            fb.text("CONDUCTANCE", 27, 120, 0x8410)
-            res_w = len(res_str) * 8 * 2
-            res_x = (width - res_w) // 2
-            draw_large_text(fb, res_str, res_x, 135, 2, 0xFFE0)
+            # Skin conductance label
+            fb.text("CONDUCTANCE", (width - 11 * 8) // 2, 53, 0x8410)
             
-            diff = raw_avg_1s - baseline_raw
-            diff_str = "{:+.1f}".format(diff)
-            base_text = "B:{:.1f} d:{}".format(baseline_raw, diff_str)
-            fb.text(base_text, (width - len(base_text)*8)//2, 160, 0xC618)
+            # Large skin conductance numeric display (scale 3)
+            val_str = "{:.2f}".format(conductance_us_1s) if connected else "---"
+            val_len = len(val_str)
+            val_scale = 3
+            val_w = val_len * 8 * val_scale
+            val_x = (width - val_w) // 2
+            draw_large_text(fb, val_str, val_x, 69, val_scale, 0xFFFF)
             
+            # Unit text display
+            fb.text("uS", (width - 2 * 8) // 2, 98, 0xFFE0)
+            
+            # Subtle divider
+            fb.line(10, 114, width - 10, 114, 0x3186)
+            
+            # Baseline conductance display (in uS)
+            base_txt = "Base: {:.2f} uS".format(baseline_cond_us) if baseline_cond_us is not None else "Base: ---"
+            fb.text(base_txt, (width - len(base_txt) * 8) // 2, 124, 0xC618)
+            
+            # Real-time conductance difference from baseline
+            diff_txt = "Diff: {}".format(cond_diff_str)
+            fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, cond_diff_color)
+            
+            # Subtle divider
+            fb.line(10, 158, width - 10, 158, 0x3186)
+            
+            # Footer: date & time display
             fb.line(0, 175, width, 175, 0x4208)
             fb.text(date_str, 27, 185, 0x8410)
             draw_large_text(fb, time_str, 3, 200, 2, 0x07FF)

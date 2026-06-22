@@ -1,140 +1,140 @@
 # M5StickS3 / Grove GSR Sensor Reader
 
-M5StickS3 と Seeed Studio Grove GSR（皮膚電気活動）センサーを接続し、皮膚電気抵抗値を測定・リアルタイムに本体ディスプレイへ可視化、さらにログの記録・管理を行う MicroPython プロジェクトです。
+This is a MicroPython project for connecting the M5StickS3 and Seeed Studio Grove GSR (Galvanic Skin Response) sensor, measuring skin resistance, visualizing it on the built-in display in real-time, and recording and managing logs.
 
 ---
 
-## 1. 接続仕様
+## 1. Connection Specifications
 
-M5StickS3 の Grove ポート (Port A) に GSR センサーを接続します。
+Connect the GSR sensor to the Grove port (Port A) of the M5StickS3.
 
-* **アナログ信号 (SIG)**: M5StickS3 の **GPIO 10** (SCL / 黄線 / ADC チャンネル) に接続されます。
-* **電源 (5V VCC)**: Grove センサーを動作させるため、内部の PMIC (PY32L020) に対し、内部 I2C (SDA: GPIO 47, SCL: GPIO 48) を通じて 5V 昇圧回路 (5V Boost) を有効化して電源を供給します。
-* **LCD 表示**: 内部 PMIC (GPIO 2) の制御により LCD 電源レールを有効化し、ハードウェア SPI (SCLK: 40, MOSI: 39, CS: 41, DC: 45, RST: 21) を使用して 1.14 インチの ST7789 液晶画面にリアルタイム UI を描画します。バックライトは GPIO 38 の PWM で制御します。
-
----
-
-## 2. ファイル構成
-
-* **[main.py](file:///home/karube/GitHub/M5StickS3/main.py)**: M5StickS3 起動時に自動実行されるメインエントリーファイル。各モジュールを読み込み、WiFi/NTP同期、起動時キャリブレーション、測定・UI描画・ログ記録ループを実行します。メモリ効率向上のため軽量に保たれています。
-* **[pmic_lcd.py](file:///home/karube/GitHub/M5StickS3/pmic_lcd.py)**: M5StickS3 の PMIC（電源制御）初期化と 1.14 インチ LCD ディスプレイ（ST7789）の設定、および描画用フレームバッファ（64,800バイト）のメモリ確保を担当するモジュール。
-* **[wifi_sync.py](file:///home/karube/GitHub/M5StickS3/wifi_sync.py)**: 起動時の WiFi 接続と NTP（Network Time Protocol）を用いた RTC 時刻同期、および同期画面の HUD 描画を担当するモジュール。
-* **[gsr_reader.py](file:///home/karube/GitHub/M5StickS3/gsr_reader.py)**: `main.py` と同内容のバックアップコード。
-* **[wifi_config.json](file:///home/karube/GitHub/M5StickS3/wifi_config.json)**: WiFi接続情報（SSID、パスワード）およびタイムゾーン（timezone_offset_hours）を設定するJSON形式の設定ファイル。
-* **[sync.py](file:///home/karube/GitHub/M5StickS3/sync.py)**: 開発PCから M5StickS3 にソースファイルを書き込み、同期するための自動化スクリプト。新たに分割された `pmic_lcd.py` や `wifi_sync.py` も自動で同期対象となります。
-* **[pull_logs.py](file:///home/karube/GitHub/M5StickS3/pull_logs.py)**: M5StickS3 の内蔵フラッシュからログファイル（`*.log`, `*.log.bak`）を PC に吸い上げるためのホスト用スクリプト。タイムスタンプを自動付与して保存し、デバイス側の領域解放（消去）も行えます。
+* **Analog Signal (SIG)**: Connected to **GPIO 10** (SCL / Yellow wire / ADC channel) of the M5StickS3.
+* **Power (5V VCC)**: To power the Grove sensor, the 5V boost circuit (5V Boost) is enabled and power is supplied via the internal I2C (SDA: GPIO 47, SCL: GPIO 48) connection to the internal PMIC (PY32L020).
+* **LCD Display**: Enables the LCD power rail through the control of the internal PMIC (GPIO 2) and draws the real-time UI on the 1.14-inch ST7789 LCD screen using hardware SPI (SCLK: 40, MOSI: 39, CS: 41, DC: 45, RST: 21). The backlight is controlled by PWM on GPIO 38.
 
 ---
 
-## 3. 環境構築
+## 2. File Structure
 
-本プロジェクトは Python の仮想環境 `.venv` 内の `mpremote` ライブラリを使用して M5StickS3 と通信します。
+* **[main.py](file:///home/karube/GitHub/M5StickS3/main.py)**: The main entry file executed automatically upon starting the M5StickS3. It loads each module, performs WiFi/NTP synchronization, startup calibration, and runs the measurement, UI drawing, and log recording loops. It is kept lightweight to improve memory efficiency.
+* **[pmic_lcd.py](file:///home/karube/GitHub/M5StickS3/pmic_lcd.py)**: A module responsible for initializing the M5StickS3's PMIC (power management), configuring the 1.14-inch LCD display (ST7789), and allocating memory for the drawing framebuffer (64,800 bytes).
+* **[wifi_sync.py](file:///home/karube/GitHub/M5StickS3/wifi_sync.py)**: A module responsible for the startup WiFi connection, RTC time synchronization using NTP (Network Time Protocol), and drawing the synchronization screen HUD.
+* **[gsr_reader.py](file:///home/karube/GitHub/M5StickS3/gsr_reader.py)**: Backup code containing the same contents as `main.py`.
+* **[wifi_config.json](file:///home/karube/GitHub/M5StickS3/wifi_config.json)**: A JSON configuration file to configure WiFi connection details (SSID, password) and timezone offset (`timezone_offset_hours`).
+* **[sync.py](file:///home/karube/GitHub/M5StickS3/sync.py)**: An automation script to write source files from the development PC to the M5StickS3 for synchronization. The newly separated `pmic_lcd.py` and `wifi_sync.py` are also automatically included in the sync targets.
+* **[pull_logs.py](file:///home/karube/GitHub/M5StickS3/pull_logs.py)**: A host script to retrieve log files (`*.log`, `*.log.bak`) from the M5StickS3's internal flash memory to the PC. It saves files with automatically appended timestamps, and can also clear (erase) the logs on the device to free up storage space.
+
+---
+
+## 3. Environment Setup
+
+This project communicates with the M5StickS3 using the `mpremote` library within a Python virtual environment (`.venv`).
 
 ```bash
-# 仮想環境を作成 (未作成の場合)
+# Create a virtual environment (if not already created)
 python3 -m venv .venv
 
-# 依存パッケージ (mpremote, pyserial) をインストール
+# Install dependent packages (mpremote, pyserial)
 .venv/bin/python -m pip install mpremote
 ```
 
 ---
 
-## 4. 同期スクリプト (sync.py) の使い方
+## 4. Usage of Synchronization Script (sync.py)
 
-ローカルのソースコードを M5StickS3 に書き込み、自動的に再起動します。`.git` や `.venv`、`pull_logs.py`、`downloaded_logs/` などの不要なファイルは自動で除外されます。
+Writes the local source code to the M5StickS3 and automatically reboots it. Unnecessary files/directories such as `.git`, `.venv`, `pull_logs.py`, and `downloaded_logs/` are automatically excluded.
 
-### 基本的な書き込み (ローカルファイルの追加/上書き)
+### Basic Writing (Add/Overwrite local files)
 ```bash
 ./sync.py
 ```
-*(同期対象のファイル一覧が表示された後、`y/N` で確認プロンプトが表示されます。)*
+*(After the list of files to sync is displayed, a confirmation prompt `y/N` will be shown.)*
 
-### 安全なクリーンアップ同期 (ローカルに存在しないリモート側のファイルを削除)
-ローカルから削除したファイルを M5StickS3 側からも削除し、同期します。デバイス上のログファイル (`*.log`, `*.bak`) およびシステムファイル `boot.py` は自動的に削除から保護されます。
+### Safe Cleanup Synchronization (Delete remote files that do not exist locally)
+Deletes files on the M5StickS3 that have been deleted locally and synchronizes. Log files (`*.log`, `*.bak`) and the system file `boot.py` on the device are automatically protected from deletion.
 ```bash
 ./sync.py -c
 ```
 
-### 完全なミラーリング同期 (ログも含めて完全に同期)
-ローカルのディレクトリ状態とデバイスの状態を完全に一致させます。ローカルに存在しない `.log` や `.bak` も含めてすべてのファイルがデバイス上から削除されます（`boot.py` のみ保護されます）。
+### Complete Mirroring Synchronization (Full sync including logs)
+Completely matches the device state with the local directory state. All files, including `.log` and `.bak` files that do not exist locally, are deleted from the device (only `boot.py` is protected).
 ```bash
 ./sync.py -m
 ```
 
-### オプション一覧
+### Options List
 ```bash
 ./sync.py [-h] [-p PORT] [-y] [-c] [-m]
 ```
-* `-h, --help`: ヘルプを表示。
-* `-p, --port`: シリアルポートを指定 (デフォルト: `/dev/ttyACM0`)。
-* `-y, --yes`: 実行前の確認プロンプトをスキップ。
-* `-c, --clean`: 安全なクリーンアップ（ミラーリング）を有効にする。
-* `-m, --mirror-all`: ログファイルを含めた完全なミラーリングを有効にする。
+* `-h, --help`: Show help.
+* `-p, --port`: Specify the serial port (Default: `/dev/ttyACM0`).
+* `-y, --yes`: Skip the confirmation prompt before execution.
+* `-c, --clean`: Enable safe cleanup synchronization.
+* `-m, --mirror-all`: Enable complete mirroring synchronization including log files.
 
 ---
 
-## 5. ログの吸い出し (pull_logs.py) の使い方
+## 5. Usage of Log Retrieval Script (pull_logs.py)
 
-M5StickS3 の内蔵フラッシュに蓄積された測定ログファイル (`*.log`, `*.log.bak`) を PC に安全にコピーします。
+Safely copies the measurement log files (`*.log`, `*.log.bak`) accumulated in the M5StickS3's internal flash memory to the PC.
 
-### 基本的な吸い出し (PCに保存し、デバイス側は残す)
+### Basic Retrieval (Save to PC, keep on device)
 ```bash
 ./pull_logs.py
 ```
-デバイス内のログが `downloaded_logs/` ディレクトリ配下に `gsr_readings_YYYYMMDD_hhmmss.log` のように現在日時のタイムスタンプを付与した一意のファイル名で保存され、上書きを防ぎます。
+Saves the device's logs under the `downloaded_logs/` directory with a unique filename containing a timestamp of the current date and time (e.g., `gsr_readings_YYYYMMDD_hhmmss.log`) to prevent overwriting.
 
-### 吸い出しと同時にデバイス側を消去 (ストレージの解放)
+### Retrieve and Clear (Free up storage space on the device)
 ```bash
 ./pull_logs.py -c
 ```
-ダウンロード完了後、デバイス上のログを削除してマイコンのフラッシュ容量を解放します。`-y` オプションを併用することで、確認プロンプトをスキップできます。
+After downloading is complete, deletes the logs on the device to free up the microcontroller's flash capacity. You can skip the confirmation prompt by using the `-y` option together.
 
 ---
 
-## 6. 起動時の WiFi 接続、NTP 時刻同期、およびキャリブレーション
+## 6. Startup WiFi Connection, NTP Time Sync, and Calibration
 
-M5StickS3 起動時に WiFi ネットワークへ一時的に接続して NTP（Network Time Protocol）による内蔵 RTC の時刻合わせを行った後、GSR センサーのベースライン値を決定するためのキャリブレーションを実施します。
+Upon M5StickS3 startup, it temporarily connects to a WiFi network to synchronize the built-in RTC using NTP (Network Time Protocol), and then performs calibration to determine the baseline value of the GSR sensor.
 
-* **動作フロー**:
-  1. `wifi_config.json` から接続設定を読み込みます。
-  2. 設定された SSID に WiFi 接続します（画面に接続ステータスを表示）。
-  3. NTP サーバーから現在の協定世界時（UTC）を取得し、設定された `timezone_offset_hours`（日本時間なら `9`、米国太平洋夏時間なら `-7`）を加味して RTC 時刻を設定します。
-  4. 時刻の同期完了後、直ちに WiFi 接続を切断（`wlan.disconnect()`, `wlan.active(False)`）し、省電力化を図ります。
-  5. **スタートメニュー表示（待機画面）**: キャリブレーションを開始する前に、M5StickS3の画面上にスタートメニューを表示します。この待機画面でもGSRセンサーから1秒ごとに皮膚電気伝導度（uS: マイクロジーメンス）を取得し、リアルタイム表示（接続状態と測定値）を行います。KEY1（M5ボタン）を押すことでキャリブレーションを開始します。
-  6. **GSRキャリブレーション（ベースライン決定）**: 測定ループに入る前に 10 秒間のキャリブレーションフェーズを開始します。液晶画面上でカウントダウンとプログレスバー、現在の Raw 値および抵抗値が表示され、安定した状態のベースライン値を設定します。M5ボタン（Btn A）または電源ボタンを押すことでいつでもスキップが可能です。
-  7. **メイン測定ループ**: キャリブレーション完了後、ベースラインを確定してログに追記し、メイン測定および画面描画ループに移行します。
-* **注意**: WiFi の SSID またはパスワードが未設定の場合、あるいは `YOUR_WIFI_SSID` のままの場合は、WiFi 接続と NTP 同期は自動的にスキップされ、即座にスタートメニュー表示とキャリブレーションを開始します。
-
----
-
-## 7. 画面消灯と省電力モード（トグル機能）
-
-本プロジェクトは、KEY1（本体正面のM5ボタン）または Power Button（本体左側面の電源ボタン）を短く押すことで、画面を消灯し、マイコンを省電力状態に移行させることができます。
-
-* **動作仕様**:
-  * **トグル動作**: いずれかのボタンを押すたびに、「省電力モード（画面OFF）」と「通常モード（画面ON）」が切り替わります。
-  * **バックグラウンドログ**: 画面が消灯している間も、GSRセンサーの1秒間隔のサンプリング、および `gsr_readings.log` へのログ追記はバックグラウンドで途切れず継続されます。
-* **省電力の仕組み**:
-  * **液晶バックライト消灯**: GPIO 38 を LOW にしてバックライトを消灯します。
-  * **液晶コントローラのスリープ**: ST7789 液晶に `Display Off (0x28)` および `Sleep In (0x10)` コマンドを送信します。
-  * **液晶電源レールの遮断**: PMIC (PY32L020) のレジスタを I2C 経由で制御し、液晶モジュールへの電源供給自体を完全に遮断します。
-  * **CPU 負荷の低減**: 画面がOFFの間は、メモリ負荷の高いフレームバッファ処理や SPI バス経由の描画送信処理をスキップすることで、ESP32-S3 の処理負荷を最小限に抑えます。
-* **電源ボタン (Power Button) のカスタマイズ**:
-  * 通常の M5StickS3 では電源ボタンの短押しでリセット、ダブルクリックでシャットダウンが発生しますが、起動時に PMIC のレジスタ (`0x49` および `0x4A`) を書き換えることでこれらのハードウェア挙動を無効化し、KEY1 と同じユーザー入力ボタンとして再利用しています。
-  * 長押し（4秒以上）による物理的な緊急シャットダウン機能は安全のため有効なまま維持されます。
+* **Operation Flow**:
+  1. Reads connection settings from `wifi_config.json`.
+  2. Connects to the configured WiFi SSID (displays connection status on the screen).
+  3. Obtains the current Coordinated Universal Time (UTC) from the NTP server, and sets the RTC time taking into account the configured `timezone_offset_hours` (`9` for Japan Standard Time, `-7` for US Pacific Daylight Time, etc.).
+  4. Immediately disconnects WiFi (`wlan.disconnect()`, `wlan.active(False)`) after time synchronization is complete to save power.
+  5. **Start Menu Display (Standby Screen)**: Before starting calibration, it displays a start menu on the M5StickS3 screen. Even on this standby screen, it retrieves the galvanic skin conductance (uS: microsiemens) from the GSR sensor every second and displays it in real-time (connection status and measured value). Press KEY1 (M5 button) to start calibration.
+  6. **GSR Calibration (Baseline Determination)**: Starts a 10-second calibration phase before entering the measurement loop. A countdown, progress bar, and skin conductance value are displayed on the LCD screen, setting a baseline value in a stable state. You can skip it at any time by pressing the M5 button (Btn A) or the power button.
+  7. **Main Measurement Loop**: After calibration is complete, the baseline is finalized and appended to the log, transitioning to the main measurement and screen rendering loop.
+* **Note**: If the WiFi SSID or password is not configured, or is left as `YOUR_WIFI_SSID`, the WiFi connection and NTP sync are automatically skipped, and the start menu display and calibration start immediately.
 
 ---
 
-## 8. トラブルシューティング
+## 7. Screen Off and Power Saving Mode (Toggle Function)
 
-### エラー: `Failed to connect. The port is currently in use`
-Thonny IDE などの他のプログラムが `/dev/ttyACM0` への接続を開きっぱなしにしている可能性があります。
-* **解決策**: Thonny などのシリアル接続を切断、もしくは IDE 自体を終了してから実行してください。
+This project allows you to turn off the screen and shift the microcontroller to a power-saving state by short-pressing KEY1 (M5 button on the front of the body) or the Power Button (power button on the left side of the body).
 
-### エラー: `Could not enter raw REPL`
-ESP32-S3 のネイティブ USB CDC において、マイコンがフリーズしているか、シリアル入力の割り込みを正しく処理できない状態になっている場合に発生します。
-* **解決策**:
-  1. M5StickS3 の側面にある**赤い物理RESETボタン**を一度押してください。
-  2. USB ケーブルを一度抜き差ししてください。
-  3. Thonny などのシリアルモニターが完全に閉じていることを確認してください。
+* **Operation Specifications**:
+  * **Toggle Operation**: Each press of either button toggles between "Power Saving Mode (Screen OFF)" and "Normal Mode (Screen ON)".
+  * **Background Logging**: Even while the screen is off, the 1-second interval sampling of the GSR sensor and appending of logs to `gsr_readings.log` continue seamlessly in the background.
+* **Power Saving Mechanisms**:
+  * **LCD Backlight Off**: Turns off the backlight by setting GPIO 38 to LOW.
+  * **LCD Controller Sleep**: Sends `Display Off (0x28)` and `Sleep In (0x10)` commands to the ST7789 LCD.
+  * **Cutting LCD Power Rail**: Controls registers of the PMIC (PY32L020) via I2C to completely cut power supply to the LCD module itself.
+  * **Reducing CPU Load**: While the screen is OFF, memory-intensive framebuffer processing and drawing transmission via the SPI bus are skipped to minimize the processing load on the ESP32-S3.
+* **Power Button Customization**:
+  * Normally on the M5StickS3, a short press of the power button resets the device, and a double-click causes shutdown. However, by rewriting the PMIC registers (`0x49` and `0x4A`) at startup, these hardware behaviors are disabled, allowing it to be reused as a user input button just like KEY1.
+  * The physical emergency shutdown function via a long press (4 seconds or more) remains active for safety.
+
+---
+
+## 8. Troubleshooting
+
+### Error: `Failed to connect. The port is currently in use`
+Another program, such as the Thonny IDE, may have left a connection open to `/dev/ttyACM0`.
+* **Solution**: Disconnect the serial connection in Thonny or close the IDE itself, then try again.
+
+### Error: `Could not enter raw REPL`
+This occurs with the ESP32-S3's native USB CDC when the microcontroller is frozen or unable to correctly process serial input interrupts.
+* **Solution**:
+  1. Press the **red physical RESET button** on the side of the M5StickS3 once.
+  2. Unplug and replug the USB cable once.
+  3. Ensure that serial monitors like Thonny are completely closed.
