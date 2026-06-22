@@ -163,8 +163,7 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
         diff_txt = "Diff: {}".format(cond_diff_str)
         fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, cond_diff_color)
         
-    # Subtle divider
-    fb.line(10, 158, width - 10, 158, 0x3186)
+
     
     # Footer: date & time display
     fb.line(0, 175, width, 175, 0x4208)
