@@ -250,54 +250,108 @@ def show_menu_and_wait():
     """Displays a start menu and waits for the user to press KEY1 to start calibration."""
     print("[System] Displaying start menu. Press KEY1 (M5 Button) to start calibration.")
     
-    fb.fill(0x0000)
+    # Initial display state
+    res_str = "---"
+    connected = False
     
-    # Header: "GSR MONITOR"
-    fb.fill_rect(0, 0, width, 24, 0x18C3)
-    fb.text("GSR MONITOR", 23, 8, 0xFDA0)
-    fb.line(0, 24, width, 24, 0xC618)
-    
-    # Main outer rectangle for menu
-    fb.rect(8, 36, width - 16, 128, 0x3186)
-    
-    # Instruction text
-    fb.text("START MENU", 27, 48, 0x07FF) # Cyan color for title
-    fb.text("Press KEY1", 27, 75, 0xFFFF) # White color
-    fb.text("(M5 Button)", 23, 90, 0x8410) # Gray color for hardware label
-    fb.text("to begin", 35, 110, 0xFFFF)
-    fb.text("calibration.", 19, 125, 0xFFFF)
-    
-    # Footer: status line and waiting message
-    fb.line(0, 175, width, 175, 0x4208)
-    fb.text("WAITING...", 27, 195, 0xFDA0) # Orange
-    fb.text("Btn A to Calib", 11, 215, 0x8410)
-    
-    # Flush frame buffer to LCD
-    swap_bytes(fb_buf, buf_size)
-    set_window(0, 0, width - 1, height - 1)
-    dc = pmic_lcd.dc
-    cs = pmic_lcd.cs
-    spi = pmic_lcd.spi
-    dc.on()
-    cs.off()
-    spi.write(fb_buf)
-    cs.on()
+    def draw_menu():
+        fb.fill(0x0000)
+        
+        # Header: "GSR MONITOR"
+        fb.fill_rect(0, 0, width, 24, 0x18C3)
+        fb.text("GSR MONITOR", 23, 8, 0xFDA0)
+        fb.line(0, 24, width, 24, 0xC618)
+        
+        # Main outer rectangle for menu
+        fb.rect(8, 36, width - 16, 128, 0x3186)
+        
+        # Instruction text
+        fb.text("START MENU", (width - 10 * 8) // 2, 42, 0x07FF) # Cyan color for title
+        fb.text("Press KEY1", (width - 10 * 8) // 2, 58, 0xFFFF)  # White color
+        fb.text("to calibrate", (width - 12 * 8) // 2, 70, 0x8410)
+        
+        # GSR Value text
+        fb.text("GSR VALUE", (width - 9 * 8) // 2, 92, 0x8410)
+        if connected:
+            res_w = len(res_str) * 8 * 2
+            res_x = (width - res_w) // 2
+            draw_large_text(fb, res_str, res_x, 108, 2, 0xFFE0)
+            fb.text("CONNECTED", (width - 9 * 8) // 2, 132, 0x07E0)
+        else:
+            draw_large_text(fb, "---", (width - 3 * 8 * 2) // 2, 108, 2, 0xF800)
+            fb.text("NO CONTACT", (width - 10 * 8) // 2, 132, 0xF800)
+            
+        # Footer: status line and waiting message
+        fb.line(0, 175, width, 175, 0x4208)
+        fb.text("WAITING...", 27, 195, 0xFDA0) # Orange
+        fb.text("Btn A to Calib", 11, 215, 0x8410)
+        
+        # Flush frame buffer to LCD
+        swap_bytes(fb_buf, buf_size)
+        set_window(0, 0, width - 1, height - 1)
+        dc = pmic_lcd.dc
+        cs = pmic_lcd.cs
+        spi = pmic_lcd.spi
+        dc.on()
+        cs.off()
+        spi.write(fb_buf)
+        cs.on()
+
+    # Draw the initial screen immediately
+    draw_menu()
     
     # Simple loop to wait for KEY1 press (low signal)
     # Debounce: wait for button to be released if it was already pressed
     while btn.value() == 0:
         time.sleep_ms(10)
         
-    while True:
-        if btn.value() == 0:
-            # Debounce button press
-            time.sleep_ms(20)
+    button_pressed = False
+    while not button_pressed:
+        raw_sum = 0
+        uv_sum = 0
+        count = 0
+        
+        start_time = time.ticks_ms()
+        # Sample for 1 second (1000 ms)
+        while time.ticks_diff(time.ticks_ms(), start_time) < 1000:
+            raw_sum += adc.read()
+            uv_sum += adc.read_uv()
+            count += 1
+            
+            # Check button press
             if btn.value() == 0:
-                # Wait for release
-                while btn.value() == 0:
-                    time.sleep_ms(10)
-                break
-        time.sleep_ms(50)
+                time.sleep_ms(20) # debounce
+                if btn.value() == 0:
+                    button_pressed = True
+                    # Wait for release
+                    while btn.value() == 0:
+                        time.sleep_ms(10)
+                    break
+            time.sleep_ms(10)
+            
+        if button_pressed:
+            break
+            
+        # Calculate average of 1 second sample
+        if count > 0:
+            voltage_mv = (uv_sum / count) / 1000.0
+            adc_10bit = int(voltage_mv * 1023 / 5000.0)
+            denominator = 512 - adc_10bit
+            if denominator > 0:
+                resistance = ((1024 + 2 * adc_10bit) * 10000) / denominator
+                resistance_k = resistance / 1000.0
+                conductance_us = 1000.0 / resistance_k if resistance_k > 0 else 0.0
+                res_str = "{:.2f}uS".format(conductance_us)
+                connected = True
+            else:
+                res_str = "---"
+                connected = False
+        else:
+            res_str = "---"
+            connected = False
+            
+        # Redraw screen with new values
+        draw_menu()
 
 # Show start menu and wait for KEY1 to start
 show_menu_and_wait()
