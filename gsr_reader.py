@@ -272,8 +272,8 @@ def run_calibration():
     log_to_file(log_line)
 
 def show_menu_and_wait():
-    """Displays a start menu and waits for the user to press KEY1 to start calibration."""
-    print("[System] Displaying start menu. Press KEY1 (M5 Button) to start calibration.")
+    """Displays a start menu and waits for the user to press the M5 Button to start calibration."""
+    print("[System] Displaying start menu. Press M5 Button to start calibration.")
     
     # Initial display state
     res_str = "---"
@@ -290,26 +290,24 @@ def show_menu_and_wait():
         # Main outer rectangle for menu
         fb.rect(8, 36, width - 16, 128, 0x3186)
         
-        # Instruction text
-        fb.text("START MENU", (width - 10 * 8) // 2, 42, 0x07FF) # Cyan color for title
-        fb.text("Press KEY1", (width - 10 * 8) // 2, 58, 0xFFFF)  # White color
-        fb.text("to calibrate", (width - 12 * 8) // 2, 70, 0x8410)
+        # Title of the box
+        fb.text("START MENU", (width - 10 * 8) // 2, 48, 0x07FF) # Cyan color for title
         
         # GSR Value text
-        fb.text("GSR VALUE", (width - 9 * 8) // 2, 92, 0x8410)
+        fb.text("GSR VALUE", (width - 9 * 8) // 2, 76, 0x8410)
         if connected:
             res_w = len(res_str) * 8 * 2
             res_x = (width - res_w) // 2
-            draw_large_text(fb, res_str, res_x, 108, 2, 0xFFE0)
-            fb.text("CONNECTED", (width - 9 * 8) // 2, 132, 0x07E0)
+            draw_large_text(fb, res_str, res_x, 96, 2, 0xFFE0)
+            fb.text("CONNECTED", (width - 9 * 8) // 2, 128, 0x07E0)
         else:
-            draw_large_text(fb, "---", (width - 3 * 8 * 2) // 2, 108, 2, 0xF800)
-            fb.text("NO CONTACT", (width - 10 * 8) // 2, 132, 0xF800)
+            draw_large_text(fb, "---", (width - 3 * 8 * 2) // 2, 96, 2, 0xF800)
+            fb.text("NO CONTACT", (width - 10 * 8) // 2, 128, 0xF800)
             
-        # Footer: status line and waiting message
+        # Footer: status line and instructions
         fb.line(0, 175, width, 175, 0x4208)
-        fb.text("WAITING...", 27, 195, 0xFDA0) # Orange
-        fb.text("Btn A to Calib", 11, 215, 0x8410)
+        fb.text("Press M5 Button", (width - 15 * 8) // 2, 190, 0xFDA0) # Orange
+        fb.text("to Calibrate", (width - 12 * 8) // 2, 208, 0x8410) # Gray
         
         # Flush frame buffer to LCD
         swap_bytes(fb_buf, buf_size)
