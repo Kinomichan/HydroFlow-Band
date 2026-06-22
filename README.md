@@ -152,7 +152,26 @@ This project allows you to turn off the screen and shift the microcontroller to 
 
 ---
 
-## 9. Troubleshooting
+## 9. Measurement Enhancements (Median Filter & Sweat Score)
+
+This project features two significant enhancements to improve data reliability and utility:
+
+### Median Filtering for Noise Reduction
+Due to hardware factors like power supply ripples from the 5V PMIC boost, WiFi transmission bursts, and dry electrode contact fluctuations, the analog readings are prone to spike noise. 
+* To filter these spikes, a **Median Filter** (`get_median_in_place`) is applied.
+* **Calibration**: Takes the median of each 20-sample update window (approx. 200 ms) to compute a robust baseline.
+* **1-Second Real-Time Display**: Collects raw/voltage samples for 1 second (~100 samples), computes their median, and calculates the skin conductance displayed on the screen.
+* **10-Second Log**: Collects the 1-second medians over 10 seconds and takes the median of those 10 values to write to the log. This double-layer filtering ensures extremely stable logged values.
+
+### Sweat Score (発汗スコア)
+To quantify cumulative sweat activity over time, a unique **Sweat Score** is integrated.
+* **Calculation**: Every second, the excess conductance above the baseline ($\max(0, \text{conductance\_us} - \text{baseline\_cond\_us})$) is integrated over time ($\Delta t = 1$s).
+* **Display**: Shown on the LCD screen as `Score: X.X` in cyan (y=158).
+* **Logging**: Appended to the 10-second interval log files as `Sweat Score: X.X`.
+
+---
+
+## 10. Troubleshooting
 
 ### Error: `Failed to connect. The port is currently in use`
 Another program, such as the Thonny IDE, may have left a connection open to `/dev/ttyACM0`.

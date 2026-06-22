@@ -78,10 +78,21 @@ def log_to_file(line):
     except Exception as e:
         print("Failed to write to log file:", e)
 
+def get_median_in_place(lst):
+    if not lst:
+        return 0.0
+    lst.sort()
+    n = len(lst)
+    if n % 2 == 1:
+        return float(lst[n // 2])
+    else:
+        return (lst[n // 2 - 1] + lst[n // 2]) / 2.0
+
 # Global baseline variables determined by calibration
 baseline_raw = 512.0
 baseline_uv = 2500.0 * 1000.0
 baseline_cond_us = 7.41  # Conductance in microSiemens (1000 / 135.0 kOhm)
+sweat_score = 0.0
 
 def draw_screen(connected, conductance_us, is_calibrating=False):
     """Draws the main logging display screen layout.
@@ -143,6 +154,9 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
         if (time.ticks_ms() // 500) % 2 == 0:
             diff_txt = "[CALIBRATING]"
             fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, 0xFDA0)
+            
+        score_txt = "Score: ---"
+        fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, 0x8410)
     else:
         base_txt = "Base: {:.2f} uS".format(baseline_cond_us) if baseline_cond_us is not None else "Base: ---"
         fb.text(base_txt, (width - len(base_txt) * 8) // 2, 124, 0xC618)
@@ -162,6 +176,10 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
                 
         diff_txt = "Diff: {}".format(cond_diff_str)
         fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, cond_diff_color)
+        
+        # Display Sweat Score
+        score_txt = "Score: {:.1f}".format(sweat_score)
+        fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, 0x07FF)
         
 
     
@@ -207,24 +225,28 @@ def run_calibration():
             skipped = True
             break
             
-        update_raw_sum = 0
-        update_uv_sum = 0
-        update_count = 0
+        update_raw_samples = []
+        update_uv_samples = []
         for _ in range(samples_per_update):
             val = adc.read()
             uv = adc.read_uv()
-            
-            total_raw_sum += val
-            total_uv_sum += uv
-            total_sample_count += 1
-            
-            update_raw_sum += val
-            update_uv_sum += uv
-            update_count += 1
+            update_raw_samples.append(val)
+            update_uv_samples.append(uv)
             time.sleep_ms(10)
             
-        avg_raw = update_raw_sum / update_count
-        avg_uv = update_uv_sum / update_count
+        if len(update_raw_samples) > 0:
+            median_raw = get_median_in_place(update_raw_samples)
+            median_uv = get_median_in_place(update_uv_samples)
+        else:
+            median_raw = 512.0
+            median_uv = 2500.0 * 1000.0
+            
+        total_raw_sum += median_raw
+        total_uv_sum += median_uv
+        total_sample_count += 1
+        
+        avg_raw = median_raw
+        avg_uv = median_uv
         avg_mv = avg_uv / 1000.0
         
         adc_10bit = int(avg_mv * 1023 / 5000.0)
@@ -391,22 +413,20 @@ print("\n--- Start GSR Reading (Press Ctrl+C to stop) ---")
 print("Timestamp | RawVal | Voltage(mV) | Skin_Conductance(uS) | Samples")
 time.sleep(1.0)
 
-accum_raw_sum = 0
-accum_uv_sum = 0
-accum_count = 0
+accum_raw_medians = []
+accum_uv_medians = []
+accum_sample_count = 0
 loop_count = 0
 
 while True:
     try:
-        raw_sum = 0
-        uv_sum = 0
-        count = 0
+        raw_samples = []
+        uv_samples = []
         
         start_time = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), start_time) < 1000:
-            raw_sum += adc.read()
-            uv_sum += adc.read_uv()
-            count += 1
+            raw_samples.append(adc.read())
+            uv_samples.append(adc.read_uv())
             
             btn_pressed = False
             if btn.value() == 0:
@@ -439,9 +459,13 @@ while True:
             
             time.sleep_ms(10)
             
-        raw_avg_1s = raw_sum / count
-        voltage_mv_1s = (uv_sum / count) / 1000.0
-        
+        if len(raw_samples) > 0:
+            raw_median_1s = get_median_in_place(raw_samples)
+            voltage_mv_1s = get_median_in_place(uv_samples) / 1000.0
+        else:
+            raw_median_1s = 512.0
+            voltage_mv_1s = 2500.0
+            
         adc_10bit_1s = int(voltage_mv_1s * 1023 / 5000.0)
         denominator_1s = 512 - adc_10bit_1s
         if denominator_1s > 0:
@@ -455,14 +479,19 @@ while True:
             connected = False
             conductance_us_1s = 0.0
             
-        accum_raw_sum += raw_sum
-        accum_uv_sum += uv_sum
-        accum_count += count
+        if connected and baseline_cond_us is not None:
+            diff_1s = conductance_us_1s - baseline_cond_us
+            if diff_1s > 0:
+                sweat_score += diff_1s * 1.0
+            
+        accum_raw_medians.append(raw_median_1s)
+        accum_uv_medians.append(voltage_mv_1s * 1000.0)
+        accum_sample_count += len(raw_samples)
         loop_count += 1
         
         if loop_count >= 10:
-            raw_avg_10s = accum_raw_sum / accum_count
-            voltage_mv_10s = (accum_uv_sum / accum_count) / 1000.0
+            raw_median_10s = get_median_in_place(accum_raw_medians)
+            voltage_mv_10s = get_median_in_place(accum_uv_medians) / 1000.0
             
             adc_10bit_10s = int(voltage_mv_10s * 1023 / 5000.0)
             denominator_10s = 512 - adc_10bit_10s
@@ -477,22 +506,22 @@ while True:
             else:
                 log_res_str = "Out of Range (No Contact)"
                 
-            raw_diff_10s = raw_avg_10s - baseline_raw
+            raw_diff_10s = raw_median_10s - baseline_raw
             
             now = rtc.datetime()
             timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
                 now[0], now[1], now[2], now[4], now[5], now[6]
             )
             
-            log_line = "[{}] Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Conductance: {} | Baseline Raw: {:.1f} | Samples: {}".format(
-                timestamp, raw_avg_10s, raw_diff_10s, voltage_mv_10s, log_res_str, baseline_raw, accum_count
+            log_line = "[{}] Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Conductance: {} | Sweat Score: {:.1f} | Baseline Raw: {:.1f} | Samples: {}".format(
+                timestamp, raw_median_10s, raw_diff_10s, voltage_mv_10s, log_res_str, sweat_score, baseline_raw, accum_sample_count
             )
             print("[Log] " + log_line)
             log_to_file(log_line)
             
-            accum_raw_sum = 0
-            accum_uv_sum = 0
-            accum_count = 0
+            accum_raw_medians = []
+            accum_uv_medians = []
+            accum_sample_count = 0
             loop_count = 0
             
         if display_on:
