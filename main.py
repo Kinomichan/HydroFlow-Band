@@ -81,10 +81,10 @@ def log_to_file(line):
 # Global baseline variables determined by calibration
 baseline_raw = 512.0
 baseline_uv = 2500.0 * 1000.0
-baseline_res_k = 135.0
+baseline_cond_us = 7.41  # Conductance in microSiemens (1000 / 135.0 kOhm)
 
 def run_calibration():
-    global baseline_raw, baseline_uv, baseline_res_k
+    global baseline_raw, baseline_uv, baseline_cond_us
     
     print("\n--- Starting GSR Calibration (10s) ---")
     print("Please touch the electrodes and remain still.")
@@ -132,7 +132,8 @@ def run_calibration():
         if denom > 0:
             res = ((1024 + 2 * adc_10bit) * 10000) / denom
             res_k = res / 1000.0
-            res_str = "{:.1f}k".format(res_k)
+            cond_us = 1000.0 / res_k if res_k > 0 else 0.0
+            res_str = "{:.2f}uS".format(cond_us)
             connected = True
         else:
             res_str = "---"
@@ -163,7 +164,7 @@ def run_calibration():
         raw_text = "RAW: {:d}".format(int(avg_raw))
         fb.text(raw_text, (width - len(raw_text)*8)//2, 130, 0xC618)
         if connected:
-            res_text = "RES: {}".format(res_str)
+            res_text = "COND: {}".format(res_str)
             fb.text(res_text, (width - len(res_text)*8)//2, 144, 0x07E0)
         else:
             res_text = "NO CONTACT"
@@ -192,13 +193,14 @@ def run_calibration():
         denom = 512 - adc_10bit
         if denom > 0:
             res = ((1024 + 2 * adc_10bit) * 10000) / denom
-            baseline_res_k = res / 1000.0
+            res_k = res / 1000.0
+            baseline_cond_us = 1000.0 / res_k if res_k > 0 else 0.0
         else:
-            baseline_res_k = None
+            baseline_cond_us = None
     else:
         baseline_raw = 512.0
         baseline_uv = 2500.0 * 1000.0
-        baseline_res_k = 135.0
+        baseline_cond_us = 7.41
         
     fb.fill(0x0000)
     fb.fill_rect(0, 0, width, 24, 0x18C3)
@@ -211,9 +213,9 @@ def run_calibration():
     raw_res_str = "{:.1f}".format(baseline_raw)
     fb.text(raw_res_str, (width - len(raw_res_str)*8)//2, 64, 0xFFFF)
     
-    fb.text("BASELINE RES:", 14, 88, 0x8410)
-    if baseline_res_k is not None:
-        res_val_str = "{:.1f} kOhm".format(baseline_res_k)
+    fb.text("BASELINE COND:", 14, 88, 0x8410)
+    if baseline_cond_us is not None:
+        res_val_str = "{:.2f} uS".format(baseline_cond_us)
         fb.text(res_val_str, (width - len(res_val_str)*8)//2, 104, 0xFFFF)
     else:
         fb.text("Out of Range", (width - 12*8)//2, 104, 0xF800)
@@ -235,8 +237,8 @@ def run_calibration():
     timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
         now[0], now[1], now[2], now[4], now[5], now[6]
     )
-    res_log_str = "{:.2f} kOhm".format(baseline_res_k) if baseline_res_k is not None else "Out of Range"
-    log_line = "[{}] [System] Baseline established. Raw: {:.1f} | Voltage: {:.1f} mV | Resistance: {}".format(
+    res_log_str = "{:.3f} uS".format(baseline_cond_us) if baseline_cond_us is not None else "Out of Range"
+    log_line = "[{}] [System] Baseline established. Raw: {:.1f} | Voltage: {:.1f} mV | Conductance: {}".format(
         timestamp, baseline_raw, baseline_uv / 1000.0, res_log_str
     )
     print(log_line)
@@ -307,7 +309,7 @@ print("Logging to file:", LOG_FILE)
 run_calibration()
 
 print("\n--- Start GSR Reading (Press Ctrl+C to stop) ---")
-print("Timestamp | RawVal | Voltage(mV) | Skin_Resistance(kOhm) | Samples")
+print("Timestamp | RawVal | Voltage(mV) | Skin_Conductance(uS) | Samples")
 time.sleep(1.0)
 
 accum_raw_sum = 0
@@ -366,7 +368,8 @@ while True:
         if denominator_1s > 0:
             resistance_1s = ((1024 + 2 * adc_10bit_1s) * 10000) / denominator_1s
             resistance_k_1s = resistance_1s / 1000.0
-            res_str = "{:.1f}k".format(resistance_k_1s)
+            conductance_us_1s = 1000.0 / resistance_k_1s if resistance_k_1s > 0 else 0.0
+            res_str = "{:.2f}uS".format(conductance_us_1s)
             connected = True
         else:
             res_str = "---"
@@ -386,10 +389,11 @@ while True:
             if denominator_10s > 0:
                 resistance_10s = ((1024 + 2 * adc_10bit_10s) * 10000) / denominator_10s
                 resistance_k_10s = resistance_10s / 1000.0
-                log_res_str = "{:.2f} kOhm".format(resistance_k_10s)
-                if baseline_res_k is not None:
-                    res_diff = resistance_k_10s - baseline_res_k
-                    log_res_str += " (diff: {:+.2f} kOhm)".format(res_diff)
+                conductance_us_10s = 1000.0 / resistance_k_10s if resistance_k_10s > 0 else 0.0
+                log_res_str = "{:.3f} uS".format(conductance_us_10s)
+                if baseline_cond_us is not None:
+                    res_diff = conductance_us_10s - baseline_cond_us
+                    log_res_str += " (diff: {:+.3f} uS)".format(res_diff)
             else:
                 log_res_str = "Out of Range (No Contact)"
                 
@@ -400,7 +404,7 @@ while True:
                 now[0], now[1], now[2], now[4], now[5], now[6]
             )
             
-            log_line = "[{}] Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Resistance: {} | Baseline Raw: {:.1f} | Samples: {}".format(
+            log_line = "[{}] Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Conductance: {} | Baseline Raw: {:.1f} | Samples: {}".format(
                 timestamp, raw_avg_10s, raw_diff_10s, voltage_mv_10s, log_res_str, baseline_raw, accum_count
             )
             print("[Log] " + log_line)
@@ -437,7 +441,7 @@ while True:
                 fb.fill_rect(17, 90, 101, 14, 0x7800)
                 fb.text("NO CONTACT", 27, 93, 0xFFFF)
                 
-            fb.text("RESISTANCE", 27, 120, 0x8410)
+            fb.text("CONDUCTANCE", 27, 120, 0x8410)
             res_w = len(res_str) * 8 * 2
             res_x = (width - res_w) // 2
             draw_large_text(fb, res_str, res_x, 135, 2, 0xFFE0)
