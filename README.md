@@ -16,10 +16,12 @@ M5StickS3 の Grove ポート (Port A) に GSR センサーを接続します。
 
 ## 2. ファイル構成
 
-* **[main.py](file:///home/karube/GitHub/M5StickS3/main.py)**: M5StickS3 起動時に自動実行されるメインプログラム。PMICの初期化、LCD電源・バックライトの有効化、TFT初期化、1秒間隔の高速GSRサンプリング、測定結果のリアルタイムUI描画、ログファイルへの追記を行います。
+* **[main.py](file:///home/karube/GitHub/M5StickS3/main.py)**: M5StickS3 起動時に自動実行されるメインエントリーファイル。各モジュールを読み込み、WiFi/NTP同期、起動時キャリブレーション、測定・UI描画・ログ記録ループを実行します。メモリ効率向上のため軽量に保たれています。
+* **[pmic_lcd.py](file:///home/karube/GitHub/M5StickS3/pmic_lcd.py)**: M5StickS3 の PMIC（電源制御）初期化と 1.14 インチ LCD ディスプレイ（ST7789）の設定、および描画用フレームバッファ（64,800バイト）のメモリ確保を担当するモジュール。
+* **[wifi_sync.py](file:///home/karube/GitHub/M5StickS3/wifi_sync.py)**: 起動時の WiFi 接続と NTP（Network Time Protocol）を用いた RTC 時刻同期、および同期画面の HUD 描画を担当するモジュール。
 * **[gsr_reader.py](file:///home/karube/GitHub/M5StickS3/gsr_reader.py)**: `main.py` と同内容のバックアップコード。
 * **[wifi_config.json](file:///home/karube/GitHub/M5StickS3/wifi_config.json)**: WiFi接続情報（SSID、パスワード）およびタイムゾーン（timezone_offset_hours）を設定するJSON形式の設定ファイル。
-* **[sync.py](file:///home/karube/GitHub/M5StickS3/sync.py)**: 開発PCから M5StickS3 にソースファイルを書き込み、同期するための自動化スクリプト。
+* **[sync.py](file:///home/karube/GitHub/M5StickS3/sync.py)**: 開発PCから M5StickS3 にソースファイルを書き込み、同期するための自動化スクリプト。新たに分割された `pmic_lcd.py` や `wifi_sync.py` も自動で同期対象となります。
 * **[pull_logs.py](file:///home/karube/GitHub/M5StickS3/pull_logs.py)**: M5StickS3 の内蔵フラッシュからログファイル（`*.log`, `*.log.bak`）を PC に吸い上げるためのホスト用スクリプト。タイムスタンプを自動付与して保存し、デバイス側の領域解放（消去）も行えます。
 
 ---
@@ -90,17 +92,18 @@ M5StickS3 の内蔵フラッシュに蓄積された測定ログファイル (`*
 
 ---
 
-## 6. 起動時の WiFi 接続と NTP 時刻同期
+## 6. 起動時の WiFi 接続、NTP 時刻同期、およびキャリブレーション
 
-M5StickS3 起動時に WiFi ネットワークへ一時的に接続し、NTP（Network Time Protocol）を用いて内蔵 RTC の時刻合わせを自動で行います。
+M5StickS3 起動時に WiFi ネットワークへ一時的に接続して NTP（Network Time Protocol）による内蔵 RTC の時刻合わせを行った後、GSR センサーのベースライン値を決定するためのキャリブレーションを実施します。
 
 * **動作フロー**:
   1. `wifi_config.json` から接続設定を読み込みます。
   2. 設定された SSID に WiFi 接続します（画面に接続ステータスを表示）。
   3. NTP サーバーから現在の協定世界時（UTC）を取得し、設定された `timezone_offset_hours`（日本時間なら `9`、米国太平洋夏時間なら `-7`）を加味して RTC 時刻を設定します。
   4. 時刻の同期完了後、直ちに WiFi 接続を切断（`wlan.disconnect()`, `wlan.active(False)`）し、省電力化を図ります。
-  5. メインの GSR 測定および画面描画ループに移行します。
-* **注意**: WiFi の SSID またはパスワードが未設定の場合、あるいは `YOUR_WIFI_SSID` のままの場合は、WiFi 接続と NTP 同期は自動的にスキップされ、即座に GSR 測定を開始します。
+  5. **GSRキャリブレーション（ベースライン決定）**: 測定ループに入る前に 10 秒間のキャリブレーションフェーズを開始します。液晶画面上でカウントダウンとプログレスバー、現在の Raw 値および抵抗値が表示され、安定した状態のベースライン値を設定します。M5ボタン（Btn A）または電源ボタンを押すことでいつでもスキップが可能です。
+  6. **メイン測定ループ**: キャリブレーション完了後、ベースラインを確定してログに追記し、メイン測定および画面描画ループに移行します。
+* **注意**: WiFi の SSID またはパスワードが未設定の場合、あるいは `YOUR_WIFI_SSID` のままの場合は、WiFi 接続と NTP 同期は自動的にスキップされ、即座にキャリブレーションを開始します。
 
 ---
 
