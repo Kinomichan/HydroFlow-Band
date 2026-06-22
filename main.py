@@ -250,21 +250,95 @@ adc.atten(ADC.ATTN_11DB)
 # Initialize RTC
 rtc = RTC()
 
-def show_sync_status(title, lines):
+def show_sync_status(title, lines, progress=None):
     # Clear screen with pure black
     fb.fill(0x0000)
     
-    # Header bar
-    fb.fill_rect(0, 0, width, 24, 0x9000) # Dark red / crimson background
-    fb.text(title, (width - len(title) * 8) // 2, 8, 0xFFFF)
-    fb.line(0, 24, width, 24, 0xC618)
+    # 1. Futuristic corner brackets HUD frame
+    # Top-left corner
+    fb.line(6, 6, 16, 6, 0x07FF)
+    fb.line(6, 6, 6, 16, 0x07FF)
+    # Top-right corner
+    fb.line(width - 7, 6, width - 17, 6, 0x07FF)
+    fb.line(width - 7, 6, width - 7, 16, 0x07FF)
+    # Bottom-left corner
+    fb.line(6, height - 7, 16, height - 7, 0x07FF)
+    fb.line(6, height - 7, 6, height - 17, 0x07FF)
+    # Bottom-right corner
+    fb.line(width - 7, height - 7, width - 17, height - 7, 0x07FF)
+    fb.line(width - 7, height - 7, width - 7, height - 17, 0x07FF)
     
-    # Draw each line of status text
-    y = 40
-    for text in lines:
-        fb.text(text, 10, y, 0xFFFF)
-        y += 20
+    # 2. Glowing Header Bar
+    # Draw a thin double header line with title in between
+    fb.fill_rect(8, 12, 4, 12, 0x07FF) # Neon cyan accent block
+    fb.text(title, 16, 14, 0x07FF)     # Cyan title
+    fb.line(8, 28, width - 9, 28, 0x07FF)
+    
+    # 3. Status messages box
+    fb.rect(8, 36, width - 16, 128, 0x18C3) # Bounding box
+    
+    # Auto-wrap/reformat text lines to prevent overflow
+    formatted_lines = []
+    for line in lines:
+        if line.startswith("IP: "):
+            formatted_lines.append("IP:")
+            formatted_lines.append(line[4:])
+        elif line.startswith("SSID:"):
+            formatted_lines.append("SSID:")
+            formatted_lines.append(line[5:].strip())
+        else:
+            # Wrap to 14 characters to fit in the box nicely
+            s = line
+            while len(s) > 14:
+                formatted_lines.append(s[:14])
+                s = s[14:]
+            if s:
+                formatted_lines.append(s)
+                
+    # Draw formatted lines inside the box with custom color scheme
+    y = 44
+    for line in formatted_lines:
+        if y > 150: # prevent overflow outside bounding box
+            break
+        # Color coding keywords
+        if "OK" in line or "Success" in line or "Connected" in line or "Success!" in line or "OFF" in line:
+            color = 0x07E0 # Green
+        elif "Failed" in line or "Failed!" in line or "Error" in line or "ERROR" in line or "FAIL" in line:
+            color = 0xF800 # Red
+        elif "Connecting" in line or "Syncing" in line or "Loading" in line:
+            color = 0xFDA0 # Amber/Orange
+        else:
+            color = 0xFFFF # White
+            
+        fb.text(line, 14, y, color)
+        y += 14
+
+    # 4. Progress bar section (bottom HUD)
+    if progress is not None:
+        # Progress percentage
+        prog_str = "{:d}%".format(progress)
+        fb.text(prog_str, (width - len(prog_str) * 8) // 2, 175, 0x07FF)
         
+        # Segmented progress bar
+        bar_x = 16
+        bar_y = 190
+        bar_w = width - 32 # 103 pixels
+        bar_h = 8
+        fb.rect(bar_x, bar_y, bar_w, bar_h, 0x3186) # Slate gray frame
+        
+        num_segments = 10
+        seg_w = (bar_w - 4) // num_segments # 9 pixels
+        filled_segments = int(progress / 10)
+        
+        for i in range(num_segments):
+            seg_x = bar_x + 2 + i * (seg_w + 1)
+            if seg_x + seg_w > bar_x + bar_w - 2:
+                break
+            if i < filled_segments:
+                fb.fill_rect(seg_x, bar_y + 2, seg_w - 1, bar_h - 4, 0x07FF) # Cyan block
+            else:
+                fb.fill_rect(seg_x, bar_y + 2, seg_w - 1, bar_h - 4, 0x0841) # Dark gray block
+
     # Push to display
     swap_bytes(fb_buf, buf_size)
     set_window(0, 0, width - 1, height - 1)
@@ -278,7 +352,7 @@ def connect_wifi_and_sync_time():
     import network
     import ntptime
     
-    show_sync_status("WIFI CONNECT", ["Loading config..."])
+    show_sync_status("WIFI CONNECT", ["Loading config..."], progress=10)
     
     try:
         with open("wifi_config.json", "r") as f:
@@ -290,7 +364,7 @@ def connect_wifi_and_sync_time():
             "not found or",
             "invalid.",
             "Skipping sync."
-        ])
+        ], progress=0)
         time.sleep(2.0)
         return
         
@@ -304,7 +378,7 @@ def connect_wifi_and_sync_time():
             "SSID not configured",
             "in wifi_config.json",
             "Skipping sync."
-        ])
+        ], progress=100)
         time.sleep(2.0)
         return
         
@@ -313,7 +387,7 @@ def connect_wifi_and_sync_time():
         "  " + ssid[:12] + ("..." if len(ssid) > 12 else ""),
         "Status:",
         "  Connecting..."
-    ])
+    ], progress=25)
     
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
@@ -331,7 +405,7 @@ def connect_wifi_and_sync_time():
             "  " + ssid[:12] + ("..." if len(ssid) > 12 else ""),
             "Status:",
             "  Connecting" + "." * (i % 4 + 1)
-        ])
+        ], progress=30 + int(i * 2.5))
         
     if not connected:
         print("WiFi connection failed.")
@@ -341,7 +415,7 @@ def connect_wifi_and_sync_time():
             "Status:",
             "  Connection Failed!",
             "Proceeding..."
-        ])
+        ], progress=0)
         wlan.active(False)
         time.sleep(2.0)
         return
@@ -352,7 +426,7 @@ def connect_wifi_and_sync_time():
         "WiFi: Connected",
         "IP: " + ip,
         "NTP Syncing..."
-    ])
+    ], progress=70)
     
     # Try to synchronize time
     sync_success = False
@@ -382,21 +456,21 @@ def connect_wifi_and_sync_time():
                 "Time Set:",
                 "  " + time_str,
                 "Saving power..."
-            ])
+            ], progress=90)
         except Exception as e:
             print("Failed to set local time:", e)
             show_sync_status("SYNC ERROR", [
                 "NTP Sync: OK",
                 "Failed to set",
                 "local timezone!"
-            ])
+            ], progress=80)
     else:
         print("NTP sync failed.")
         show_sync_status("SYNC FAIL", [
             "WiFi: Connected",
             "NTP Sync: Failed!",
             "Proceeding..."
-        ])
+        ], progress=75)
         
     time.sleep(1.5)
     
@@ -404,7 +478,7 @@ def connect_wifi_and_sync_time():
     show_sync_status("WIFI CLOSE", [
         "Disconnecting WiFi",
         "to save power..."
-    ])
+    ], progress=95)
     try:
         wlan.disconnect()
         wlan.active(False)
@@ -415,7 +489,7 @@ def connect_wifi_and_sync_time():
         "WiFi Interface OFF",
         "Power Saved.",
         "Starting GSR..."
-    ])
+    ], progress=100)
     time.sleep(1.0)
 
 # Connect to WiFi and synchronize time
