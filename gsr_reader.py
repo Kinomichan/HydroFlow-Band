@@ -184,10 +184,10 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
 def run_calibration():
     global baseline_raw, baseline_uv, baseline_cond_us
     
-    print("\n--- Starting GSR Calibration (10s) ---")
+    print("\n--- Starting GSR Calibration (120s) ---")
     print("Please touch the electrodes and remain still.")
     
-    duration_s = 10
+    duration_s = 120
     samples_per_update = 20
     total_updates = (duration_s * 1000) // (samples_per_update * 10)
     
