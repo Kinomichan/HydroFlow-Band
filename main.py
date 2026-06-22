@@ -275,8 +275,8 @@ def run_calibration():
     log_to_file(log_line)
 
 def show_menu_and_wait():
-    """Displays a start menu and waits for the user to press the M5 Button to start calibration."""
-    print("[System] Displaying start menu. Press M5 Button to start calibration.")
+    """Displays a start menu and waits for the user to press the M5 Button to start logging."""
+    print("[System] Displaying start menu. Press M5 Button to start logging.")
     
     # Initial display state
     res_str = "---"
@@ -310,7 +310,7 @@ def show_menu_and_wait():
         # Footer: status line and instructions
         fb.line(0, 175, width, 175, 0x4208)
         fb.text("Press M5 Button", (width - 15 * 8) // 2, 190, 0xFDA0) # Orange
-        fb.text("to Calibrate", (width - 12 * 8) // 2, 208, 0x8410) # Gray
+        fb.text("to Start Log", (width - 12 * 8) // 2, 208, 0x8410) # Gray
         
         # Flush frame buffer to LCD
         swap_bytes(fb_buf, buf_size)
