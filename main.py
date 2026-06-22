@@ -191,8 +191,9 @@ def run_calibration():
     samples_per_update = 20
     total_updates = (duration_s * 1000) // (samples_per_update * 10)
     
-    raw_samples = []
-    uv_samples = []
+    total_raw_sum = 0
+    total_uv_sum = 0
+    total_sample_count = 0
     skipped = False
     
     for update in range(total_updates):
@@ -213,8 +214,10 @@ def run_calibration():
         for _ in range(samples_per_update):
             val = adc.read()
             uv = adc.read_uv()
-            raw_samples.append(val)
-            uv_samples.append(uv)
+            
+            total_raw_sum += val
+            total_uv_sum += uv
+            total_sample_count += 1
             
             update_raw_sum += val
             update_uv_sum += uv
@@ -239,9 +242,9 @@ def run_calibration():
         if display_on:
             draw_screen(connected, cond_us, is_calibrating=True)
             
-    if not skipped and len(raw_samples) > 0:
-        baseline_raw = sum(raw_samples) / len(raw_samples)
-        baseline_uv = sum(uv_samples) / len(uv_samples)
+    if not skipped and total_sample_count > 0:
+        baseline_raw = total_raw_sum / total_sample_count
+        baseline_uv = total_uv_sum / total_sample_count
         
         baseline_mv = baseline_uv / 1000.0
         adc_10bit = int(baseline_mv * 1023 / 5000.0)
