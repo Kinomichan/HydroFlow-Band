@@ -136,7 +136,7 @@ Upon M5StickS3 startup, it temporarily connects to a WiFi network to synchronize
 
 ## 8. Screen Off and Power Saving Mode (Toggle Function)
 
-This project allows you to turn off the screen and shift the microcontroller to a power-saving state by short-pressing KEY1 (M5 button on the front of the body) or the Power Button (power button on the left side of the body).
+This project allows you to turn off the screen and shift the microcontroller to a power-saving state by short-pressing the **BOOT** button (GPIO 0) or the **Power Button** (power button on the left side of the body).
 
 * **Operation Specifications**:
   * **Toggle Operation**: Each press of either button toggles between "Power Saving Mode (Screen OFF)" and "Normal Mode (Screen ON)".
@@ -176,12 +176,12 @@ To quantify cumulative sweat activity over time, a unique **Sweat Score** is int
 This project features a system interrupt menu that can be accessed during logging. This allows you to pause the logging sequence, continue, or reset and recalibrate the system.
 
 * **Triggering the Menu**:
-  * Press either the **BOOT** button (GPIO 0) or the **KEY 2** button (GPIO 12) during logging to interrupt the operation and open the menu. If the display was turned off (power saving mode), it will be turned back on automatically.
+  * Press the **KEY 2** button (GPIO 12) during logging to interrupt the operation and open the menu. If the display was turned off (power saving mode), it will be turned back on automatically.
 * **Menu Options**:
   1. **Continue**: Resume the logging session seamlessly without losing any previous data or resetting the sweat score.
   2. **Recalibrate**: Clear all accumulators, reset the sweat score to `0.0`, generate a new log file name, perform the 60-second calibration process again, and start a fresh logging session.
 * **Menu Controls**:
-  * **Select/Cycle Options**: Press the **BOOT** button or **KEY 2** button.
+  * **Select/Cycle Options**: Press the **KEY 2** button.
   * **Confirm/Execute Selection**: Press the **KEY 1** (M5 front) button.
 
 ---

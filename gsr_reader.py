@@ -318,13 +318,13 @@ def run_calibration():
     log_to_file(log_line)
 
 def show_interrupt_menu():
-    """Displays the interrupt menu when BOOT or KEY 2 button is pressed.
+    """Displays the interrupt menu when KEY 2 button is pressed.
     
     Allows the user to choose between:
     - Continue Logging (Option 0)
     - Calibrate & Restart (Option 1)
     
-    BOOT / KEY 2 button: Cycles selection
+    KEY 2 button: Cycles selection
     KEY 1 button: Confirms selection
     """
     print("[System] Displaying interrupt menu.")
@@ -332,7 +332,7 @@ def show_interrupt_menu():
     selected_option = 0  # 0: Continue Logging, 1: Calibrate & Restart
     
     # Wait until buttons are released first to prevent accidental instant select
-    while boot_btn.value() == 0 or key2_btn.value() == 0 or btn.value() == 0:
+    while key2_btn.value() == 0 or btn.value() == 0:
         time.sleep_ms(10)
         
     last_action_time = time.ticks_ms()
@@ -367,7 +367,7 @@ def show_interrupt_menu():
         
         # Footer instruction
         fb.line(0, 175, width, 175, 0x4208)
-        fb.text("BOOT/KEY2: Select", (width - 17 * 8) // 2, 190, 0xFDA0) # Orange
+        fb.text("KEY2: Select", (width - 12 * 8) // 2, 190, 0xFDA0) # Orange
         fb.text("KEY1: Confirm", (width - 13 * 8) // 2, 208, 0x8410) # Gray
         
         # Flush to screen
@@ -386,16 +386,15 @@ def show_interrupt_menu():
     while True:
         now = time.ticks_ms()
         # Read buttons
-        boot_pressed = (boot_btn.value() == 0)
         key2_pressed = (key2_btn.value() == 0)
         key1_pressed = (btn.value() == 0)
         
-        if (boot_pressed or key2_pressed) and time.ticks_diff(now, last_action_time) > 300:
+        if key2_pressed and time.ticks_diff(now, last_action_time) > 300:
             last_action_time = now
             selected_option = 1 - selected_option  # Toggle between 0 and 1
             draw_menu_options()
             # Wait for button release
-            while boot_btn.value() == 0 or key2_btn.value() == 0:
+            while key2_btn.value() == 0:
                 time.sleep_ms(10)
                 
         elif key1_pressed and time.ticks_diff(now, last_action_time) > 300:
@@ -541,7 +540,7 @@ while True:
             uv_samples.append(adc.read_uv())
             
             btn_pressed = False
-            if btn.value() == 0:
+            if boot_btn.value() == 0:
                 btn_pressed = True
             elif is_power_button_pressed():
                 btn_pressed = True
@@ -568,10 +567,10 @@ while True:
                             print("[System] Failed display sleep cmd:", e)
                         disable_lcd_power()
                         print("[System] Display OFF complete.")
-            # Check for BOOT or KEY2 button press to open menu
-            if boot_btn.value() == 0 or key2_btn.value() == 0:
+            # Check for KEY2 button press to open menu
+            if key2_btn.value() == 0:
                 time.sleep_ms(50)  # Debounce
-                if boot_btn.value() == 0 or key2_btn.value() == 0:
+                if key2_btn.value() == 0:
                     if not display_on:
                         print("[System] Turning display ON for menu...")
                         enable_lcd_power()
