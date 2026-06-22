@@ -14,6 +14,7 @@ IGNORE_PATTERNS = {
     ".gitignore",
     "sync.py",
     "pull_logs.py",
+    "clear_logs.py",
     "downloaded_logs",
     "__pycache__",
     ".DS_Store",

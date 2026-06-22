@@ -22,7 +22,8 @@ Connect the GSR sensor to the Grove port (Port A) of the M5StickS3.
 * **[gsr_reader.py](file:///home/karube/GitHub/M5StickS3/gsr_reader.py)**: Backup code containing the same contents as `main.py`.
 * **[wifi_config.json](file:///home/karube/GitHub/M5StickS3/wifi_config.json)**: A JSON configuration file to configure WiFi connection details (SSID, password) and timezone offset (`timezone_offset_hours`).
 * **[sync.py](file:///home/karube/GitHub/M5StickS3/sync.py)**: An automation script to write source files from the development PC to the M5StickS3 for synchronization. The newly separated `pmic_lcd.py` and `wifi_sync.py` are also automatically included in the sync targets.
-* **[pull_logs.py](file:///home/karube/GitHub/M5StickS3/pull_logs.py)**: A host script to retrieve log files (`*.log`, `*.log.bak`) from the M5StickS3's internal flash memory to the PC. It saves files with automatically appended timestamps, and can also clear (erase) the logs on the device to free up storage space.
+* **[pull_logs.py](file:///home/karube/GitHub/M5StickS3/pull_logs.py)**: A host script to retrieve log files (`*.log`, `*.log.bak`) from the M5StickS3's internal flash memory to the PC. It saves files with automatically appended timestamps.
+* **[clear_logs.py](file:///home/karube/GitHub/M5StickS3/clear_logs.py)**: A host script to delete all log files (`*.log`, `*.log.bak`) from the M5StickS3's internal flash memory to free up storage space.
 
 ---
 
@@ -92,7 +93,32 @@ After downloading is complete, deletes the logs on the device to free up the mic
 
 ---
 
-## 6. Startup WiFi Connection, NTP Time Sync, and Calibration
+## 6. Usage of Log Deletion Script (clear_logs.py)
+
+Deletes all log files (`*.log`, `*.log.bak`) stored in the M5StickS3's internal flash memory to free up space.
+
+### Basic Deletion (Prompts for confirmation)
+```bash
+./clear_logs.py
+```
+*(Scans the device, lists all found logs, and prompts `y/N` before deleting them.)*
+
+### Force Deletion (Skip confirmation prompt)
+```bash
+./clear_logs.py -y
+```
+
+### Options List
+```bash
+./clear_logs.py [-h] [-p PORT] [-y]
+```
+* `-h, --help`: Show help.
+* `-p, --port`: Specify the serial port (Default: `/dev/ttyACM0`).
+* `-y, --yes`: Skip confirmation prompt.
+
+---
+
+## 7. Startup WiFi Connection, NTP Time Sync, and Calibration
 
 Upon M5StickS3 startup, it temporarily connects to a WiFi network to synchronize the built-in RTC using NTP (Network Time Protocol), and then performs calibration to determine the baseline value of the GSR sensor.
 
@@ -108,7 +134,7 @@ Upon M5StickS3 startup, it temporarily connects to a WiFi network to synchronize
 
 ---
 
-## 7. Screen Off and Power Saving Mode (Toggle Function)
+## 8. Screen Off and Power Saving Mode (Toggle Function)
 
 This project allows you to turn off the screen and shift the microcontroller to a power-saving state by short-pressing KEY1 (M5 button on the front of the body) or the Power Button (power button on the left side of the body).
 
@@ -126,7 +152,7 @@ This project allows you to turn off the screen and shift the microcontroller to 
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### Error: `Failed to connect. The port is currently in use`
 Another program, such as the Thonny IDE, may have left a connection open to `/dev/ttyACM0`.
