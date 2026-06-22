@@ -128,7 +128,7 @@ Upon M5StickS3 startup, it temporarily connects to a WiFi network to synchronize
   3. Obtains the current Coordinated Universal Time (UTC) from the NTP server, and sets the RTC time taking into account the configured `timezone_offset_hours` (`9` for Japan Standard Time, `-7` for US Pacific Daylight Time, etc.).
   4. Immediately disconnects WiFi (`wlan.disconnect()`, `wlan.active(False)`) after time synchronization is complete to save power.
   5. **Start Menu Display (Standby Screen)**: Before starting calibration, it displays a start menu on the M5StickS3 screen. Even on this standby screen, it retrieves the galvanic skin conductance (uS: microsiemens) from the GSR sensor every second and displays it in real-time (connection status and measured value). Press the M5 Button to start logging.
-  6. **GSR Calibration (Baseline Determination)**: Starts a 120-second calibration phase before entering the measurement loop. The screen immediately transitions to the real-time skin conductance reading display (normal logging layout) showing a blinking calibration mark. You can skip it at any time by pressing the M5 button (Btn A) or the power button.
+  6. **GSR Calibration (Baseline Determination)**: Starts a 60-second calibration phase before entering the measurement loop. The screen immediately transitions to the real-time skin conductance reading display (normal logging layout) showing a blinking calibration mark. You can skip it at any time by pressing the M5 button (Btn A) or the power button.
   7. **Main Measurement Loop**: After calibration is complete, the baseline is finalized and appended to the log, transitioning to the main measurement and screen rendering loop.
 * **Note**: If the WiFi SSID or password is not configured, or is left as `YOUR_WIFI_SSID`, the WiFi connection and NTP sync are automatically skipped, and the start menu display and calibration start immediately.
 
@@ -179,7 +179,7 @@ This project features a system interrupt menu that can be accessed during loggin
   * Press either the **BOOT** button (GPIO 0) or the **KEY 2** button (GPIO 12) during logging to interrupt the operation and open the menu. If the display was turned off (power saving mode), it will be turned back on automatically.
 * **Menu Options**:
   1. **Continue**: Resume the logging session seamlessly without losing any previous data or resetting the sweat score.
-  2. **Recalibrate**: Clear all accumulators, reset the sweat score to `0.0`, generate a new log file name, perform the 120-second calibration process again, and start a fresh logging session.
+  2. **Recalibrate**: Clear all accumulators, reset the sweat score to `0.0`, generate a new log file name, perform the 60-second calibration process again, and start a fresh logging session.
 * **Menu Controls**:
   * **Select/Cycle Options**: Press the **BOOT** button or **KEY 2** button.
   * **Confirm/Execute Selection**: Press the **KEY 1** (M5 front) button.
