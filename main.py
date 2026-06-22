@@ -55,8 +55,7 @@ def generate_log_filename():
             break
     return filename
 
-LOG_FILE = generate_log_filename()
-print("Logging to file:", LOG_FILE)
+LOG_FILE = None
 MAX_LOG_SIZE = 100 * 1024
 
 def log_to_file(line):
@@ -244,6 +243,66 @@ def run_calibration():
     log_to_file(log_line)
     
     time.sleep(2.0)
+
+def show_menu_and_wait():
+    """Displays a start menu and waits for the user to press KEY1 to start calibration."""
+    print("[System] Displaying start menu. Press KEY1 (M5 Button) to start calibration.")
+    
+    fb.fill(0x0000)
+    
+    # Header: "GSR MONITOR"
+    fb.fill_rect(0, 0, width, 24, 0x18C3)
+    fb.text("GSR MONITOR", 23, 8, 0xFDA0)
+    fb.line(0, 24, width, 24, 0xC618)
+    
+    # Main outer rectangle for menu
+    fb.rect(8, 36, width - 16, 128, 0x3186)
+    
+    # Instruction text
+    fb.text("START MENU", 27, 48, 0x07FF) # Cyan color for title
+    fb.text("Press KEY1", 27, 75, 0xFFFF) # White color
+    fb.text("(M5 Button)", 23, 90, 0x8410) # Gray color for hardware label
+    fb.text("to begin", 35, 110, 0xFFFF)
+    fb.text("calibration.", 19, 125, 0xFFFF)
+    
+    # Footer: status line and waiting message
+    fb.line(0, 175, width, 175, 0x4208)
+    fb.text("WAITING...", 27, 195, 0xFDA0) # Orange
+    fb.text("Btn A to Calib", 11, 215, 0x8410)
+    
+    # Flush frame buffer to LCD
+    swap_bytes(fb_buf, buf_size)
+    set_window(0, 0, width - 1, height - 1)
+    dc = pmic_lcd.dc
+    cs = pmic_lcd.cs
+    spi = pmic_lcd.spi
+    dc.on()
+    cs.off()
+    spi.write(fb_buf)
+    cs.on()
+    
+    # Simple loop to wait for KEY1 press (low signal)
+    # Debounce: wait for button to be released if it was already pressed
+    while btn.value() == 0:
+        time.sleep_ms(10)
+        
+    while True:
+        if btn.value() == 0:
+            # Debounce button press
+            time.sleep_ms(20)
+            if btn.value() == 0:
+                # Wait for release
+                while btn.value() == 0:
+                    time.sleep_ms(10)
+                break
+        time.sleep_ms(50)
+
+# Show start menu and wait for KEY1 to start
+show_menu_and_wait()
+
+# Initialize log file name when calibration starts
+LOG_FILE = generate_log_filename()
+print("Logging to file:", LOG_FILE)
 
 run_calibration()
 
