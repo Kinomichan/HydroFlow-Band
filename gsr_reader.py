@@ -41,6 +41,39 @@ wifi_sync.connect_wifi_and_sync_time(rtc)
 display_on = True
 last_btn_press = 0
 
+def check_and_handle_display_toggle():
+    global display_on, last_btn_press
+    btn_pressed = False
+    if boot_btn.value() == 0:
+        btn_pressed = True
+    elif is_power_button_pressed():
+        btn_pressed = True
+        
+    if btn_pressed:
+        now_ms = time.ticks_ms()
+        if time.ticks_diff(now_ms, last_btn_press) > 300:
+            last_btn_press = now_ms
+            display_on = not display_on
+            if display_on:
+                print("[System] Turning display ON (Normal Mode)...")
+                enable_lcd_power()
+                time.sleep_ms(50)
+                init_lcd()
+                bl.on()
+                print("[System] Display ON complete.")
+            else:
+                print("[System] Turning display OFF (Power Saving Mode)...")
+                bl.off()
+                try:
+                    write_cmd(0x28)
+                    write_cmd(0x10)
+                except Exception as e:
+                    print("[System] Failed display sleep cmd:", e)
+                disable_lcd_power()
+                print("[System] Display OFF complete.")
+            return True
+    return False
+
 def generate_log_filename():
     now = rtc.datetime()
     timestamp = "{:04d}{:02d}{:02d}_{:02d}{:02d}{:02d}".format(
@@ -236,10 +269,10 @@ def run_calibration():
     skipped = False
     
     for update in range(total_updates):
+        check_and_handle_display_toggle()
+        
         btn_pressed = False
-        if btn.value() == 0:
-            btn_pressed = True
-        elif is_power_button_pressed():
+        if btn.value() == 0 or key2_btn.value() == 0:
             btn_pressed = True
             
         if btn_pressed:
@@ -476,6 +509,9 @@ def show_menu_and_wait():
             uv_sum += adc.read_uv()
             count += 1
             
+            # Check display toggle
+            check_and_handle_display_toggle()
+            
             # Check button press
             if btn.value() == 0:
                 time.sleep_ms(20) # debounce
@@ -539,34 +575,8 @@ while True:
             raw_samples.append(adc.read())
             uv_samples.append(adc.read_uv())
             
-            btn_pressed = False
-            if boot_btn.value() == 0:
-                btn_pressed = True
-            elif is_power_button_pressed():
-                btn_pressed = True
-                
-            if btn_pressed:
-                now_ms = time.ticks_ms()
-                if time.ticks_diff(now_ms, last_btn_press) > 300:
-                    last_btn_press = now_ms
-                    display_on = not display_on
-                    if display_on:
-                        print("[System] Turning display ON (Normal Mode)...")
-                        enable_lcd_power()
-                        time.sleep_ms(50)
-                        init_lcd()
-                        bl.on()
-                        print("[System] Display ON complete.")
-                    else:
-                        print("[System] Turning display OFF (Power Saving Mode)...")
-                        bl.off()
-                        try:
-                            write_cmd(0x28)
-                            write_cmd(0x10)
-                        except Exception as e:
-                            print("[System] Failed display sleep cmd:", e)
-                        disable_lcd_power()
-                        print("[System] Display OFF complete.")
+            # Check display toggle
+            check_and_handle_display_toggle()
             # Check for KEY2 button press to open menu
             if key2_btn.value() == 0:
                 time.sleep_ms(50)  # Debounce
