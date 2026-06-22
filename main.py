@@ -83,6 +83,104 @@ baseline_raw = 512.0
 baseline_uv = 2500.0 * 1000.0
 baseline_cond_us = 7.41  # Conductance in microSiemens (1000 / 135.0 kOhm)
 
+def draw_screen(connected, conductance_us, is_calibrating=False):
+    """Draws the main logging display screen layout.
+    
+    If is_calibrating is True, it draws a calibration mark instead of the baseline diff,
+    and a blinking indicator in the header.
+    """
+    # Retrieve current date/time from RTC
+    now = rtc.datetime()
+    time_str = "{:02d}:{:02d}:{:02d}".format(now[4], now[5], now[6])
+    date_str = "{:04d}-{:02d}-{:02d}".format(now[0], now[1], now[2])
+    
+    fb.fill(0x0000)
+    
+    # Header: GSR Monitor title
+    fb.fill_rect(0, 0, width, 24, 0x18C3)  # Clean dark gray/blue
+    fb.text("GSR MONITOR", 23, 8, 0xFDA0)  # Orange
+    fb.line(0, 24, width, 24, 0xC618)
+    
+    # Blinking red/orange square indicator if calibrating
+    if is_calibrating:
+        if (time.ticks_ms() // 500) % 2 == 0:
+            fb.fill_rect(118, 7, 10, 10, 0xF800)  # Red
+        else:
+            fb.fill_rect(118, 7, 10, 10, 0xFDA0)  # Orange
+        fb.rect(117, 6, 12, 12, 0xFFFF)           # White border
+        
+    # Connection status bar (green when connected, red when no contact)
+    if connected:
+        fb.fill_rect(0, 25, width, 16, 0x03E0)
+        fb.text("CONNECTED", (width - 9 * 8) // 2, 29, 0xFFFF)
+    else:
+        fb.fill_rect(0, 25, width, 16, 0x7800)
+        fb.text("NO CONTACT", (width - 10 * 8) // 2, 29, 0xFFFF)
+        
+    # Skin conductance label
+    fb.text("CONDUCTANCE", (width - 11 * 8) // 2, 53, 0x8410)
+    
+    # Large skin conductance numeric display (scale 3)
+    val_str = "{:.2f}".format(conductance_us) if connected else "---"
+    val_len = len(val_str)
+    val_scale = 3
+    val_w = val_len * 8 * val_scale
+    val_x = (width - val_w) // 2
+    draw_large_text(fb, val_str, val_x, 69, val_scale, 0xFFFF)
+    
+    # Unit text display
+    fb.text("uS", (width - 2 * 8) // 2, 98, 0xFFE0)
+    
+    # Subtle divider
+    fb.line(10, 114, width - 10, 114, 0x3186)
+    
+    # Baseline and Difference/Calibration displays
+    if is_calibrating:
+        base_txt = "Base: Calibrating"
+        fb.text(base_txt, (width - len(base_txt) * 8) // 2, 124, 0xC618)
+        
+        # Blinking [CALIBRATING] message
+        if (time.ticks_ms() // 500) % 2 == 0:
+            diff_txt = "[CALIBRATING]"
+            fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, 0xFDA0)
+    else:
+        base_txt = "Base: {:.2f} uS".format(baseline_cond_us) if baseline_cond_us is not None else "Base: ---"
+        fb.text(base_txt, (width - len(base_txt) * 8) // 2, 124, 0xC618)
+        
+        # Real-time conductance difference from baseline
+        cond_diff_str = "---"
+        cond_diff_color = 0x8410
+        if connected and baseline_cond_us is not None:
+            cond_diff = conductance_us - baseline_cond_us
+            cond_diff_str = "{:+.2f} uS".format(cond_diff)
+            if cond_diff > 0:
+                cond_diff_color = 0xFD20  # Orange/Red for increase (stress)
+            elif cond_diff < 0:
+                cond_diff_color = 0x07E0  # Green for decrease (relaxation)
+            else:
+                cond_diff_color = 0xFFFF  # White for no change
+                
+        diff_txt = "Diff: {}".format(cond_diff_str)
+        fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, cond_diff_color)
+        
+    # Subtle divider
+    fb.line(10, 158, width - 10, 158, 0x3186)
+    
+    # Footer: date & time display
+    fb.line(0, 175, width, 175, 0x4208)
+    fb.text(date_str, 27, 185, 0x8410)
+    draw_large_text(fb, time_str, 3, 200, 2, 0x07FF)
+    
+    swap_bytes(fb_buf, buf_size)
+    set_window(0, 0, width - 1, height - 1)
+    dc = pmic_lcd.dc
+    cs = pmic_lcd.cs
+    spi = pmic_lcd.spi
+    dc.on()
+    cs.off()
+    spi.write(fb_buf)
+    cs.on()
+
 def run_calibration():
     global baseline_raw, baseline_uv, baseline_cond_us
     
@@ -133,56 +231,14 @@ def run_calibration():
             res = ((1024 + 2 * adc_10bit) * 10000) / denom
             res_k = res / 1000.0
             cond_us = 1000.0 / res_k if res_k > 0 else 0.0
-            res_str = "{:.2f}uS".format(cond_us)
             connected = True
         else:
-            res_str = "---"
             connected = False
+            cond_us = 0.0
             
-        fb.fill(0x0000)
-        
-        fb.fill_rect(0, 0, width, 24, 0x18C3)
-        fb.text("CALIBRATION", 23, 8, 0xFDA0)
-        fb.line(0, 24, width, 24, 0xC618)
-        
-        fb.rect(8, 36, width - 16, 128, 0x3186)
-        fb.text("ESTABLISHING", 20, 46, 0x8410)
-        fb.text("BASELINE", 36, 58, 0x8410)
-        
-        secs_left = duration_s - int((update * samples_per_update * 10) / 1000)
-        secs_str = "{:d}s".format(secs_left)
-        draw_large_text(fb, secs_str, (width - len(secs_str)*8*3)//2, 76, 3, 0xFFFF)
-        
-        progress_pct = int((update + 1) / total_updates * 100)
-        bar_x = 16
-        bar_y = 112
-        bar_w = width - 32
-        bar_h = 8
-        fb.rect(bar_x, bar_y, bar_w, bar_h, 0x18C3)
-        fb.fill_rect(bar_x + 2, bar_y + 2, int((bar_w - 4) * progress_pct / 100), bar_h - 4, 0xFDA0)
-        
-        # Display connection status and conductance during calibration (hiding raw values)
-        if connected:
-            res_text = "COND: {}".format(res_str)
-            fb.text(res_text, (width - len(res_text)*8)//2, 137, 0x07E0)
-        else:
-            res_text = "NO CONTACT"
-            fb.text(res_text, (width - len(res_text)*8)//2, 137, 0xF800)
+        if display_on:
+            draw_screen(connected, cond_us, is_calibrating=True)
             
-        fb.line(0, 175, width, 175, 0x4208)
-        fb.text("KEEP STILL", 27, 185, 0xFDA0)
-        fb.text("Btn A to Skip", 15, 205, 0x8410)
-        
-        swap_bytes(fb_buf, buf_size)
-        set_window(0, 0, width - 1, height - 1)
-        dc = pmic_lcd.dc
-        cs = pmic_lcd.cs
-        spi = pmic_lcd.spi
-        dc.on()
-        cs.off()
-        spi.write(fb_buf)
-        cs.on()
-        
     if not skipped and len(raw_samples) > 0:
         baseline_raw = sum(raw_samples) / len(raw_samples)
         baseline_uv = sum(uv_samples) / len(uv_samples)
@@ -201,35 +257,9 @@ def run_calibration():
         baseline_uv = 2500.0 * 1000.0
         baseline_cond_us = 7.41
         
-    fb.fill(0x0000)
-    fb.fill_rect(0, 0, width, 24, 0x18C3)
-    status_title = "CALIB SKIPPED" if skipped else "CALIB COMPLETE"
-    fb.text(status_title, (width - len(status_title)*8)//2, 8, 0x07E0 if not skipped else 0xFDA0)
-    fb.line(0, 24, width, 24, 0xC618)
-    
-    fb.rect(8, 36, width - 16, 128, 0x3186)
-    
-    # Display baseline conductance only (hiding raw values)
-    fb.text("BASELINE COND:", (width - 14 * 8) // 2, 58, 0x8410)
-    if baseline_cond_us is not None:
-        res_val_str = "{:.2f} uS".format(baseline_cond_us)
-        draw_large_text(fb, res_val_str, (width - len(res_val_str) * 8 * 2) // 2, 78, 2, 0xFFFF)
-    else:
-        fb.text("Out of Range", (width - 12 * 8) // 2, 78, 0xF800)
+    if display_on:
+        draw_screen(True if baseline_cond_us is not None else False, baseline_cond_us if baseline_cond_us is not None else 7.41, is_calibrating=False)
         
-    fb.line(0, 175, width, 175, 0x4208)
-    fb.text("STARTING LOG...", 11, 195, 0x07E0)
-    
-    swap_bytes(fb_buf, buf_size)
-    set_window(0, 0, width - 1, height - 1)
-    dc = pmic_lcd.dc
-    cs = pmic_lcd.cs
-    spi = pmic_lcd.spi
-    dc.on()
-    cs.off()
-    spi.write(fb_buf)
-    cs.on()
-    
     now = rtc.datetime()
     timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
         now[0], now[1], now[2], now[4], now[5], now[6]
@@ -240,8 +270,6 @@ def run_calibration():
     )
     print(log_line)
     log_to_file(log_line)
-    
-    time.sleep(2.0)
 
 def show_menu_and_wait():
     """Displays a start menu and waits for the user to press KEY1 to start calibration."""
@@ -467,84 +495,8 @@ while True:
             accum_count = 0
             loop_count = 0
             
-        now = rtc.datetime()
-        time_str = "{:02d}:{:02d}:{:02d}".format(now[4], now[5], now[6])
-        date_str = "{:04d}-{:02d}-{:02d}".format(now[0], now[1], now[2])
-        
-        # Calculate conductance difference from baseline
-        cond_diff_str = "---"
-        cond_diff_color = 0x8410
-        if connected and baseline_cond_us is not None:
-            cond_diff = conductance_us_1s - baseline_cond_us
-            cond_diff_str = "{:+.2f} uS".format(cond_diff)
-            if cond_diff > 0:
-                cond_diff_color = 0xFD20  # Orange/Red for increase (stress)
-            elif cond_diff < 0:
-                cond_diff_color = 0x07E0  # Green for decrease (relaxation)
-            else:
-                cond_diff_color = 0xFFFF  # White for no change
-        else:
-            cond_diff_str = "---"
-            cond_diff_color = 0x8410  # Gray
-
         if display_on:
-            fb.fill(0x0000)
-            
-            # Header: GSR Monitor title
-            fb.fill_rect(0, 0, width, 24, 0x18C3)  # Clean dark gray/blue
-            fb.text("GSR MONITOR", 23, 8, 0xFDA0)  # Orange
-            fb.line(0, 24, width, 24, 0xC618)
-            
-            # Connection status bar (green when connected, red when no contact)
-            if connected:
-                fb.fill_rect(0, 25, width, 16, 0x03E0)
-                fb.text("CONNECTED", (width - 9 * 8) // 2, 29, 0xFFFF)
-            else:
-                fb.fill_rect(0, 25, width, 16, 0x7800)
-                fb.text("NO CONTACT", (width - 10 * 8) // 2, 29, 0xFFFF)
-                
-            # Skin conductance label
-            fb.text("CONDUCTANCE", (width - 11 * 8) // 2, 53, 0x8410)
-            
-            # Large skin conductance numeric display (scale 3)
-            val_str = "{:.2f}".format(conductance_us_1s) if connected else "---"
-            val_len = len(val_str)
-            val_scale = 3
-            val_w = val_len * 8 * val_scale
-            val_x = (width - val_w) // 2
-            draw_large_text(fb, val_str, val_x, 69, val_scale, 0xFFFF)
-            
-            # Unit text display
-            fb.text("uS", (width - 2 * 8) // 2, 98, 0xFFE0)
-            
-            # Subtle divider
-            fb.line(10, 114, width - 10, 114, 0x3186)
-            
-            # Baseline conductance display (in uS)
-            base_txt = "Base: {:.2f} uS".format(baseline_cond_us) if baseline_cond_us is not None else "Base: ---"
-            fb.text(base_txt, (width - len(base_txt) * 8) // 2, 124, 0xC618)
-            
-            # Real-time conductance difference from baseline
-            diff_txt = "Diff: {}".format(cond_diff_str)
-            fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, cond_diff_color)
-            
-            # Subtle divider
-            fb.line(10, 158, width - 10, 158, 0x3186)
-            
-            # Footer: date & time display
-            fb.line(0, 175, width, 175, 0x4208)
-            fb.text(date_str, 27, 185, 0x8410)
-            draw_large_text(fb, time_str, 3, 200, 2, 0x07FF)
-            
-            swap_bytes(fb_buf, buf_size)
-            set_window(0, 0, width - 1, height - 1)
-            dc = pmic_lcd.dc
-            cs = pmic_lcd.cs
-            spi = pmic_lcd.spi
-            dc.on()
-            cs.off()
-            spi.write(fb_buf)
-            cs.on()
+            draw_screen(connected, conductance_us_1s, is_calibrating=False)
             
     except KeyboardInterrupt:
         print("\nProgram stopped by user.")
