@@ -107,9 +107,17 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
     
     fb.fill(0x0000)
     
-    # Header: GSR Monitor title
-    fb.fill_rect(0, 0, width, 24, 0x18C3)  # Clean dark gray/blue
-    fb.text("GSR MONITOR", 23, 8, 0xFDA0)  # Orange
+    # Header: GSR Monitor title (flashes red/dark red if sweat score is above 10000)
+    if not is_calibrating and sweat_score > 10000:
+        if (time.ticks_ms() // 500) % 2 == 0:
+            fb.fill_rect(0, 0, width, 24, 0xF800)  # Bright Red
+            fb.text("!!! ALARM !!!", (width - 13 * 8) // 2, 8, 0xFFFF)  # White text
+        else:
+            fb.fill_rect(0, 0, width, 24, 0x7800)  # Dark Red
+            fb.text("!!! ALARM !!!", (width - 13 * 8) // 2, 8, 0xFFFF)  # White text
+    else:
+        fb.fill_rect(0, 0, width, 24, 0x18C3)  # Clean dark gray/blue
+        fb.text("GSR MONITOR", 23, 8, 0xFDA0)  # Orange
     fb.line(0, 24, width, 24, 0xC618)
     
     # Blinking red/orange square indicator if calibrating
@@ -177,9 +185,13 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
         diff_txt = "Diff: {}".format(cond_diff_str)
         fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, cond_diff_color)
         
-        # Display Sweat Score
+        # Display Sweat Score (flashes if it exceeds 10000)
         score_txt = "Score: {:.1f}".format(sweat_score)
-        fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, 0x07FF)
+        if sweat_score > 10000:
+            score_color = 0xF800 if (time.ticks_ms() // 250) % 2 == 0 else 0xFFE0  # Flashing Red/Yellow
+            fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, score_color)
+        else:
+            fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, 0x07FF)
         
 
     
@@ -188,6 +200,12 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
     fb.text(date_str, 27, 185, 0x8410)
     draw_large_text(fb, time_str, 3, 200, 2, 0x07FF)
     
+    # Overlay a thick flashing red border if alarm is active
+    if not is_calibrating and sweat_score > 10000:
+        if (time.ticks_ms() // 500) % 2 == 0:
+            fb.rect(0, 0, width, height, 0xF800)
+            fb.rect(1, 1, width - 2, height - 2, 0xF800)
+            
     swap_bytes(fb_buf, buf_size)
     set_window(0, 0, width - 1, height - 1)
     dc = pmic_lcd.dc
@@ -513,8 +531,10 @@ while True:
                 now[0], now[1], now[2], now[4], now[5], now[6]
             )
             
-            log_line = "[{}] Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Conductance: {} | Sweat Score: {:.1f} | Baseline Raw: {:.1f} | Samples: {}".format(
-                timestamp, raw_median_10s, raw_diff_10s, voltage_mv_10s, log_res_str, sweat_score, baseline_raw, accum_sample_count
+            # Add alarm tag to the log message if the threshold is crossed
+            alarm_tag = " [ALARM]" if sweat_score > 10000 else ""
+            log_line = "[{}]{} Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Conductance: {} | Sweat Score: {:.1f} | Baseline Raw: {:.1f} | Samples: {}".format(
+                timestamp, alarm_tag, raw_median_10s, raw_diff_10s, voltage_mv_10s, log_res_str, sweat_score, baseline_raw, accum_sample_count
             )
             print("[Log] " + log_line)
             log_to_file(log_line)

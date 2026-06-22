@@ -166,8 +166,8 @@ Due to hardware factors like power supply ripples from the 5V PMIC boost, WiFi t
 ### Sweat Score (発汗スコア)
 To quantify cumulative sweat activity over time, a unique **Sweat Score** is integrated.
 * **Calculation**: Every second, the excess conductance above the baseline ($\max(0, \text{conductance\_us} - \text{baseline\_cond\_us})$) is integrated over time ($\Delta t = 1$s).
-* **Display**: Shown on the LCD screen as `Score: X.X` in cyan (y=158).
-* **Logging**: Appended to the 10-second interval log files as `Sweat Score: X.X`.
+* **Display**: Shown on the LCD screen as `Score: X.X` in cyan (y=158). When the score exceeds 10000.0, a prominent visual alarm is triggered: the header title changes to a flashing `"!!! ALARM !!!"` (flashing red and dark red), the score text color flashes red and yellow, and a flashing thick red border is drawn around the entire screen.
+* **Logging**: Appended to the 10-second interval log files as `Sweat Score: X.X`. If the score exceeds 10000.0, an `[ALARM]` tag is appended right after the timestamp (e.g., `[YYYY-MM-DD hh:mm:ss] [ALARM] Raw: ...`).
 
 ---
 
