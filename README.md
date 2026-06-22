@@ -171,7 +171,22 @@ To quantify cumulative sweat activity over time, a unique **Sweat Score** is int
 
 ---
 
-## 10. Troubleshooting
+## 10. System Interrupt Menu (Re-calibration & Logging Control)
+
+This project features a system interrupt menu that can be accessed during logging. This allows you to pause the logging sequence, continue, or reset and recalibrate the system.
+
+* **Triggering the Menu**:
+  * Press either the **BOOT** button (GPIO 0) or the **KEY 2** button (GPIO 12) during logging to interrupt the operation and open the menu. If the display was turned off (power saving mode), it will be turned back on automatically.
+* **Menu Options**:
+  1. **Continue**: Resume the logging session seamlessly without losing any previous data or resetting the sweat score.
+  2. **Recalibrate**: Clear all accumulators, reset the sweat score to `0.0`, generate a new log file name, perform the 120-second calibration process again, and start a fresh logging session.
+* **Menu Controls**:
+  * **Select/Cycle Options**: Press the **BOOT** button or **KEY 2** button.
+  * **Confirm/Execute Selection**: Press the **KEY 1** (M5 front) button.
+
+---
+
+## 11. Troubleshooting
 
 ### Error: `Failed to connect. The port is currently in use`
 Another program, such as the Thonny IDE, may have left a connection open to `/dev/ttyACM0`.

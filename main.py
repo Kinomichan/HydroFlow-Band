@@ -28,6 +28,10 @@ adc_pin = Pin(10, Pin.IN)
 adc = ADC(adc_pin)
 adc.atten(ADC.ATTN_11DB)
 
+# Initialize control buttons
+boot_btn = Pin(0, Pin.IN, Pin.PULL_UP)
+key2_btn = Pin(12, Pin.IN, Pin.PULL_UP)
+
 # Initialize RTC
 rtc = RTC()
 
@@ -313,6 +317,96 @@ def run_calibration():
     print(log_line)
     log_to_file(log_line)
 
+def show_interrupt_menu():
+    """Displays the interrupt menu when BOOT or KEY 2 button is pressed.
+    
+    Allows the user to choose between:
+    - Continue Logging (Option 0)
+    - Calibrate & Restart (Option 1)
+    
+    BOOT / KEY 2 button: Cycles selection
+    KEY 1 button: Confirms selection
+    """
+    print("[System] Displaying interrupt menu.")
+    
+    selected_option = 0  # 0: Continue Logging, 1: Calibrate & Restart
+    
+    # Wait until buttons are released first to prevent accidental instant select
+    while boot_btn.value() == 0 or key2_btn.value() == 0 or btn.value() == 0:
+        time.sleep_ms(10)
+        
+    last_action_time = time.ticks_ms()
+    
+    def draw_menu_options():
+        fb.fill(0x0000)
+        
+        # Header: "SYSTEM MENU"
+        fb.fill_rect(0, 0, width, 24, 0x18C3) # Dark blue/gray header
+        fb.text("SYSTEM MENU", 23, 8, 0xFDA0) # Orange text
+        fb.line(0, 24, width, 24, 0xC618)
+        
+        # Outer box
+        fb.rect(6, 36, width - 12, 128, 0x3186)
+        
+        # Option 1: Continue Logging
+        opt1_color = 0xFFFF if selected_option == 0 else 0x8410
+        opt1_bg = 0x18C3 if selected_option == 0 else 0x0000
+        fb.fill_rect(10, 54, width - 20, 30, opt1_bg)
+        fb.rect(10, 54, width - 20, 30, opt1_color)
+        fb.text("Continue", 20, 60, opt1_color)
+        fb.text("Logging", 20, 72, opt1_color)
+        
+        # Option 2: Calibrate & Restart
+        opt2_color = 0xFFFF if selected_option == 1 else 0x8410
+        opt2_bg = 0x18C3 if selected_option == 1 else 0x0000
+        fb.fill_rect(10, 104, width - 20, 42, opt2_bg)
+        fb.rect(10, 104, width - 20, 42, opt2_color)
+        fb.text("Recalibrate", 20, 110, opt2_color)
+        fb.text("& Restart", 20, 122, opt2_color)
+        fb.text("From Scratch", 20, 134, opt2_color)
+        
+        # Footer instruction
+        fb.line(0, 175, width, 175, 0x4208)
+        fb.text("BOOT/KEY2: Select", (width - 17 * 8) // 2, 190, 0xFDA0) # Orange
+        fb.text("KEY1: Confirm", (width - 13 * 8) // 2, 208, 0x8410) # Gray
+        
+        # Flush to screen
+        swap_bytes(fb_buf, buf_size)
+        set_window(0, 0, width - 1, height - 1)
+        dc = pmic_lcd.dc
+        cs = pmic_lcd.cs
+        spi = pmic_lcd.spi
+        dc.on()
+        cs.off()
+        spi.write(fb_buf)
+        cs.on()
+
+    draw_menu_options()
+    
+    while True:
+        now = time.ticks_ms()
+        # Read buttons
+        boot_pressed = (boot_btn.value() == 0)
+        key2_pressed = (key2_btn.value() == 0)
+        key1_pressed = (btn.value() == 0)
+        
+        if (boot_pressed or key2_pressed) and time.ticks_diff(now, last_action_time) > 300:
+            last_action_time = now
+            selected_option = 1 - selected_option  # Toggle between 0 and 1
+            draw_menu_options()
+            # Wait for button release
+            while boot_btn.value() == 0 or key2_btn.value() == 0:
+                time.sleep_ms(10)
+                
+        elif key1_pressed and time.ticks_diff(now, last_action_time) > 300:
+            last_action_time = now
+            # Wait for release
+            while btn.value() == 0:
+                time.sleep_ms(10)
+            return selected_option
+            
+        time.sleep_ms(20)
+
 def show_menu_and_wait():
     """Displays a start menu and waits for the user to press the M5 Button to start logging."""
     print("[System] Displaying start menu. Press M5 Button to start logging.")
@@ -474,6 +568,40 @@ while True:
                             print("[System] Failed display sleep cmd:", e)
                         disable_lcd_power()
                         print("[System] Display OFF complete.")
+            # Check for BOOT or KEY2 button press to open menu
+            if boot_btn.value() == 0 or key2_btn.value() == 0:
+                time.sleep_ms(50)  # Debounce
+                if boot_btn.value() == 0 or key2_btn.value() == 0:
+                    if not display_on:
+                        print("[System] Turning display ON for menu...")
+                        enable_lcd_power()
+                        time.sleep_ms(50)
+                        init_lcd()
+                        bl.on()
+                        display_on = True
+                    
+                    choice = show_interrupt_menu()
+                    
+                    if choice == 0:
+                        # Continue logging
+                        print("[System] Resuming logging...")
+                        raw_samples = []
+                        uv_samples = []
+                        start_time = time.ticks_ms()
+                    elif choice == 1:
+                        # Recalibrate and restart logging from scratch
+                        print("[System] Recalibrating and restarting logging...")
+                        sweat_score = 0.0
+                        LOG_FILE = generate_log_filename()
+                        print("New log file:", LOG_FILE)
+                        run_calibration()
+                        accum_raw_medians = []
+                        accum_uv_medians = []
+                        accum_sample_count = 0
+                        loop_count = 0
+                        raw_samples = []
+                        uv_samples = []
+                        start_time = time.ticks_ms()
             
             time.sleep_ms(10)
             
