@@ -163,7 +163,7 @@ Due to hardware factors like power supply ripples from the 5V PMIC boost, WiFi t
 * **1-Second Real-Time Display**: Collects raw/voltage samples for 1 second (~100 samples), computes their median, and calculates the skin conductance displayed on the screen.
 * **10-Second Log**: Collects the 1-second medians over 10 seconds and takes the median of those 10 values to write to the log. This double-layer filtering ensures extremely stable logged values.
 
-### Sweat Score (発汗スコア)
+### Sweat Score
 To quantify cumulative sweat activity over time, a unique **Sweat Score** is integrated.
 * **Calculation**: Every second, the excess conductance above the baseline ($\max(0, \text{conductance\_us} - \text{baseline\_cond\_us})$) is integrated over time ($\Delta t = 1$s).
 * **Display**: Shown on the LCD screen as `Score: X.X` in cyan (y=158). When the score exceeds 10000.0, a prominent visual alarm is triggered: the header title changes to a flashing `"!!! ALARM !!!"` (flashing red and dark red), the score text color flashes red and yellow, and a flashing thick red border is drawn around the entire screen.
