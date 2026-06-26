@@ -240,3 +240,9 @@ This occurs with the ESP32-S3's native USB CDC when the microcontroller is froze
   1. Press the **red physical RESET button** on the side of the M5StickS3 once.
   2. Unplug and replug the USB cable once.
   3. Ensure that serial monitors like Thonny are completely closed.
+
+---
+
+## 13. License
+
+This project is licensed under the MIT License.

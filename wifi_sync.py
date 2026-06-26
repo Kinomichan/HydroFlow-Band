@@ -17,47 +17,47 @@ def show_boot_screen(status_text, progress=None, results=None):
     spi = pmic_lcd.spi
     draw_large_text = pmic_lcd.draw_large_text
     
-    # 背景クリア (Sleek Dark Mode)
+    # Clear background (Sleek Dark Mode)
     fb.fill(0x0000)
     
-    # 中央にロゴ（GSR MONITOR）を洗練されたスタイルで描画
-    # GSR: 倍率3 (3文字 * 24px = 72px) -> x = (135 - 72) // 2 = 31
-    # MONITOR: 倍率1 (7文字 * 8px = 56px) -> x = (135 - 56) // 2 = 39
-    draw_large_text(fb, "GSR", 31, 50, 3, 0xFDA0)  # M5オレンジ
-    fb.text("MONITOR", 39, 82, 0xFFFF)             # 白
+    # Draw logo (GSR MONITOR) in the center with a refined style
+    # GSR: scale 3 (3 chars * 24px = 72px) -> x = (135 - 72) // 2 = 31
+    # MONITOR: scale 1 (7 chars * 8px = 56px) -> x = (135 - 56) // 2 = 39
+    draw_large_text(fb, "GSR", 31, 50, 3, 0xFDA0)  # M5 Orange
+    fb.text("MONITOR", 39, 82, 0xFFFF)             # White
     
     if results is None:
-        # 進行中の表示
-        # ステータス文字列
+        # Progress indication
+        # Status text
         msg_w = len(status_text) * 8
         msg_x = (width - msg_w) // 2
-        fb.text(status_text, msg_x, 130, 0x8410)    # 控えめなグレー
+        fb.text(status_text, msg_x, 130, 0x8410)    # Subtle gray
         
-        # 細くシンプルなプログレスバー
+        # Thin and simple progress bar
         if progress is not None:
             bar_w = 90
             bar_x = (width - bar_w) // 2
             bar_y = 155
             bar_h = 3
-            # バーの背景
+            # Bar background
             fb.fill_rect(bar_x, bar_y, bar_w, bar_h, 0x18E3)
-            # バーの進行分
+            # Bar progress
             current_w = int(bar_w * progress / 100)
             if current_w > 0:
                 fb.fill_rect(bar_x, bar_y, current_w, bar_h, 0xFDA0)
     else:
-        # 結果表示
+        # Results indication
         y = 125
         for label, val, color in results:
-            # ラベル (e.g. "[ WIFI ]")
+            # Label (e.g. "[ WIFI ]")
             lbl_str = "[ {} ]".format(label)
             fb.text(lbl_str, 15, y, 0x8410)
-            # 値 (e.g. "OK", "FAIL", "SKIP")
+            # Value (e.g. "OK", "FAIL", "SKIP")
             fb.text(val, 90, y, color)
             y += 22
             
-        # 画面下部に READY を表示
-        fb.text("READY", 47, 185, 0x07E0) # 緑
+        # Display READY at the bottom of the screen
+        fb.text("READY", 47, 185, 0x07E0) # Green
         
     swap_bytes(fb_buf, buf_size)
     set_window(0, 0, width - 1, height - 1)
