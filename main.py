@@ -129,7 +129,7 @@ def get_median_in_place(lst):
 baseline_raw = 512.0
 baseline_uv = 2500.0 * 1000.0
 baseline_cond_us = 7.41  # Conductance in microSiemens (1000 / 135.0 kOhm)
-sweat_score = 0.0
+countdown_seconds = None
 
 def draw_screen(connected, conductance_us, is_calibrating=False):
     """Draws the main logging display screen layout.
@@ -137,15 +137,12 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
     If is_calibrating is True, it draws a calibration mark instead of the baseline diff,
     and a blinking indicator in the header.
     """
-    # Retrieve current date/time from RTC
-    now = rtc.datetime()
-    time_str = "{:02d}:{:02d}:{:02d}".format(now[4], now[5], now[6])
-    date_str = "{:04d}-{:02d}-{:02d}".format(now[0], now[1], now[2])
-    
     fb.fill(0x0000)
     
-    # Header: GSR Monitor title (flashes red/dark red if sweat score is above 10000)
-    if not is_calibrating and sweat_score > 10000:
+    global countdown_seconds
+    
+    # 1. Header: GSR Monitor title (flashes red/dark red if countdown reaches 0)
+    if not is_calibrating and countdown_seconds == 0:
         if (time.ticks_ms() // 500) % 2 == 0:
             fb.fill_rect(0, 0, width, 24, 0xF800)  # Bright Red
             fb.text("!!! ALARM !!!", (width - 13 * 8) // 2, 8, 0xFFFF)  # White text
@@ -165,16 +162,23 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
             fb.fill_rect(118, 7, 10, 10, 0xFDA0)  # Orange
         fb.rect(117, 6, 12, 12, 0xFFFF)           # White border
         
-    # Connection status bar (green when connected, red when no contact)
+    # 2. Connection Status (Modern dot indicator style)
+    # Background for connection status panel to make it look premium
+    fb.fill_rect(8, 28, width - 16, 18, 0x0841) # Dark gray background
+    fb.rect(8, 28, width - 16, 18, 0x18C3)      # Border
     if connected:
-        fb.fill_rect(0, 25, width, 16, 0x03E0)
-        fb.text("CONNECTED", (width - 9 * 8) // 2, 29, 0xFFFF)
+        # "CONNECTED" (9 chars) -> 72px width. Dot 6px + Gap 6px + Text 72px = 84px.
+        # Start X = (135 - 84) // 2 = 25px
+        fb.fill_rect(25, 34, 6, 6, 0x07E0) # Green dot
+        fb.text("CONNECTED", 37, 33, 0xFFFF)
     else:
-        fb.fill_rect(0, 25, width, 16, 0x7800)
-        fb.text("NO CONTACT", (width - 10 * 8) // 2, 29, 0xFFFF)
+        # "NO CONTACT" (10 chars) -> 80px width. Dot 6px + Gap 6px + Text 80px = 92px.
+        # Start X = (135 - 92) // 2 = 21px
+        fb.fill_rect(21, 34, 6, 6, 0xF800) # Red dot
+        fb.text("NO CONTACT", 33, 33, 0xF800)
         
-    # Skin conductance label
-    fb.text("CONDUCTANCE", (width - 11 * 8) // 2, 53, 0x8410)
+    # 3. Skin Conductance Panel
+    fb.text("CONDUCTANCE", (width - 11 * 8) // 2, 53, 0x5AEB) # Stylish blue-gray
     
     # Large skin conductance numeric display (scale 3)
     val_str = "{:.2f}".format(conductance_us) if connected else "---"
@@ -182,29 +186,26 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
     val_scale = 3
     val_w = val_len * 8 * val_scale
     val_x = (width - val_w) // 2
-    draw_large_text(fb, val_str, val_x, 69, val_scale, 0xFFFF)
+    draw_large_text(fb, val_str, val_x, 67, val_scale, 0xFFFF)
     
     # Unit text display
-    fb.text("uS", (width - 2 * 8) // 2, 98, 0xFFE0)
+    fb.text("uS", (width - 2 * 8) // 2, 95, 0xFFE0)
     
     # Subtle divider
-    fb.line(10, 114, width - 10, 114, 0x3186)
+    fb.line(10, 112, width - 10, 112, 0x3186)
     
-    # Baseline and Difference/Calibration displays
+    # 4. Baseline and Difference/Calibration displays (Re-spaced)
     if is_calibrating:
         base_txt = "Base: Calibrating"
-        fb.text(base_txt, (width - len(base_txt) * 8) // 2, 124, 0xC618)
+        fb.text(base_txt, (width - len(base_txt) * 8) // 2, 126, 0xC618)
         
         # Blinking [CALIBRATING] message
         if (time.ticks_ms() // 500) % 2 == 0:
             diff_txt = "[CALIBRATING]"
-            fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, 0xFDA0)
-            
-        score_txt = "Score: ---"
-        fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, 0x8410)
+            fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 146, 0xFDA0)
     else:
         base_txt = "Base: {:.2f} uS".format(baseline_cond_us) if baseline_cond_us is not None else "Base: ---"
-        fb.text(base_txt, (width - len(base_txt) * 8) // 2, 124, 0xC618)
+        fb.text(base_txt, (width - len(base_txt) * 8) // 2, 126, 0x8410) # Gray
         
         # Real-time conductance difference from baseline
         cond_diff_str = "---"
@@ -220,25 +221,56 @@ def draw_screen(connected, conductance_us, is_calibrating=False):
                 cond_diff_color = 0xFFFF  # White for no change
                 
         diff_txt = "Diff: {}".format(cond_diff_str)
-        fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 142, cond_diff_color)
+        fb.text(diff_txt, (width - len(diff_txt) * 8) // 2, 146, cond_diff_color)
         
-        # Display Sweat Score (flashes if it exceeds 10000)
-        score_txt = "Score: {:.1f}".format(sweat_score)
-        if sweat_score > 10000:
-            score_color = 0xF800 if (time.ticks_ms() // 250) % 2 == 0 else 0xFFE0  # Flashing Red/Yellow
-            fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, score_color)
+    # 5. Footer: Countdown Timer Display (Replacing Date/Time)
+    # Background for footer section
+    footer_bg = 0x10A2 # Default dark gray-blue background
+    
+    if not is_calibrating and countdown_seconds == 0:
+        # Alarm flashing background
+        if (time.ticks_ms() // 250) % 2 == 0:
+            footer_bg = 0x7800 # Dark Red
         else:
-            fb.text(score_txt, (width - len(score_txt) * 8) // 2, 158, 0x07FF)
-        
-
+            footer_bg = 0x0000 # Black
+            
+    fb.fill_rect(0, 175, width, 65, footer_bg)
+    fb.line(0, 175, width, 175, 0x3186) # Divider line
     
-    # Footer: date & time display
-    fb.line(0, 175, width, 175, 0x4208)
-    fb.text(date_str, 27, 185, 0x8410)
-    draw_large_text(fb, time_str, 3, 200, 2, 0x07FF)
-    
+    if is_calibrating:
+        fb.text("TIMER", (width - 5 * 8) // 2, 182, 0x8410)
+        # Display "---" during calibration
+        draw_large_text(fb, "---", (width - 3 * 8 * 3) // 2, 198, 3, 0x8410)
+    else:
+        if countdown_seconds is None:
+            fb.text("TIMER", (width - 5 * 8) // 2, 182, 0x8410)
+            # Display "STANDBY" (7 chars) in scale 2
+            draw_large_text(fb, "STANDBY", (width - 7 * 8 * 2) // 2, 198, 2, 0x5AEB)
+        elif countdown_seconds > 0:
+            mins = countdown_seconds // 60
+            secs = countdown_seconds % 60
+            timer_str = "{:02d}:{:02d}".format(mins, secs)
+            
+            # Determine color based on remaining time
+            if countdown_seconds <= 60: # 1 minute or less
+                timer_color = 0xF800 # Red
+                fb.text("REHYDRATE NOW", (width - 13 * 8) // 2, 182, 0xF800)
+            elif countdown_seconds <= 180: # 3 minutes or less
+                timer_color = 0xFDA0 # Orange
+                fb.text("HURRY UP", (width - 8 * 8) // 2, 182, 0xFDA0)
+            else:
+                timer_color = 0x07FF # Cyan
+                fb.text("COUNTDOWN", (width - 9 * 8) // 2, 182, 0x5AEB)
+                
+            draw_large_text(fb, timer_str, (width - 5 * 8 * 3) // 2, 198, 3, timer_color)
+        else:
+            # Alarm state (00:00)
+            fb.text("!!! ALARM !!!", (width - 13 * 8) // 2, 182, 0xFFFF)
+            timer_color = 0xF800 if (time.ticks_ms() // 250) % 2 == 0 else 0xFFFF
+            draw_large_text(fb, "00:00", (width - 5 * 8 * 3) // 2, 198, 3, timer_color)
+            
     # Overlay a thick flashing red border if alarm is active
-    if not is_calibrating and sweat_score > 10000:
+    if not is_calibrating and countdown_seconds == 0:
         if (time.ticks_ms() // 500) % 2 == 0:
             fb.rect(0, 0, width, height, 0xF800)
             fb.rect(1, 1, width - 2, height - 2, 0xF800)
@@ -439,6 +471,105 @@ def show_interrupt_menu():
             
         time.sleep_ms(20)
 
+def show_alarm_menu():
+    """Displays the alarm/rehydration menu when the countdown reaches 0.
+    
+    Allows the user to choose between:
+    - Rehydrate & Continue (Option 0)
+    - Rehydrate & End Workout (Option 1)
+    
+    KEY 2 button: Cycles selection
+    KEY 1 button: Confirms selection
+    """
+    print("[System] Displaying alarm rehydration menu.")
+    
+    selected_option = 0  # 0: Rehydrate & Continue, 1: Rehydrate & End Workout
+    
+    # Wait until buttons are released first to prevent accidental instant select
+    while key2_btn.value() == 0 or btn.value() == 0:
+        time.sleep_ms(10)
+        
+    last_action_time = time.ticks_ms()
+    
+    def draw_alarm_menu_options():
+        fb.fill(0x0000)
+        
+        # Header: Flashing Alarm Title
+        if (time.ticks_ms() // 500) % 2 == 0:
+            fb.fill_rect(0, 0, width, 24, 0xF800)  # Bright Red
+            fb.text("!!! ALARM !!!", (width - 13 * 8) // 2, 8, 0xFFFF)
+        else:
+            fb.fill_rect(0, 0, width, 24, 0x7800)  # Dark Red
+            fb.text("!!! ALARM !!!", (width - 13 * 8) // 2, 8, 0xFFFF)
+        fb.line(0, 24, width, 24, 0xC618)
+        
+        # Outer box
+        fb.rect(6, 36, width - 12, 128, 0xF800) # Red box
+        
+        # Instruction text
+        fb.text("Please rehydrate", 16, 44, 0xFFFF)
+        
+        # Option 1: Rehydrate & Continue
+        opt1_color = 0xFFFF if selected_option == 0 else 0x8410
+        opt1_bg = 0x18C3 if selected_option == 0 else 0x0000
+        fb.fill_rect(10, 68, width - 20, 38, opt1_bg)
+        fb.rect(10, 68, width - 20, 38, opt1_color)
+        fb.text("Rehydrate &", 20, 74, opt1_color)
+        fb.text("Continue", 20, 88, opt1_color)
+        
+        # Option 2: Rehydrate & End
+        opt2_color = 0xFFFF if selected_option == 1 else 0x8410
+        opt2_bg = 0x18C3 if selected_option == 1 else 0x0000
+        fb.fill_rect(10, 114, width - 20, 38, opt2_bg)
+        fb.rect(10, 114, width - 20, 38, opt2_color)
+        fb.text("Rehydrate &", 20, 120, opt2_color)
+        fb.text("End Workout", 20, 134, opt2_color)
+        
+        # Footer instruction
+        fb.line(0, 175, width, 175, 0x4208)
+        fb.text("KEY2: Select", (width - 12 * 8) // 2, 190, 0xFDA0) # Orange
+        fb.text("KEY1: Confirm", (width - 13 * 8) // 2, 208, 0x8410) # Gray
+        
+        # Flush to screen
+        swap_bytes(fb_buf, buf_size)
+        set_window(0, 0, width - 1, height - 1)
+        dc = pmic_lcd.dc
+        cs = pmic_lcd.cs
+        spi = pmic_lcd.spi
+        dc.on()
+        cs.off()
+        spi.write(fb_buf)
+        cs.on()
+
+    draw_alarm_menu_options()
+    
+    while True:
+        now = time.ticks_ms()
+        # Read buttons
+        key2_pressed = (key2_btn.value() == 0)
+        key1_pressed = (btn.value() == 0)
+        
+        # Periodically redraw to keep the flashing header alive
+        if (now // 500) % 2 != ((now - 20) // 500) % 2:
+            draw_alarm_menu_options()
+        
+        if key2_pressed and time.ticks_diff(now, last_action_time) > 300:
+            last_action_time = now
+            selected_option = 1 - selected_option  # Toggle between 0 and 1
+            draw_alarm_menu_options()
+            # Wait for button release
+            while key2_btn.value() == 0:
+                time.sleep_ms(10)
+                
+        elif key1_pressed and time.ticks_diff(now, last_action_time) > 300:
+            last_action_time = now
+            # Wait for release
+            while btn.value() == 0:
+                time.sleep_ms(10)
+            return selected_option
+            
+        time.sleep_ms(20)
+
 def show_menu_and_wait():
     """Displays a start menu and waits for the user to press the M5 Button to start logging."""
     print("[System] Displaying start menu. Press M5 Button to start logging.")
@@ -547,146 +678,184 @@ def show_menu_and_wait():
         # Redraw screen with new values
         draw_menu()
 
-# Show start menu and wait for KEY1 to start
-show_menu_and_wait()
-
-# Initialize log file name when calibration starts
-LOG_FILE = generate_log_filename()
-print("Logging to file:", LOG_FILE)
-
-run_calibration()
-
-print("\n--- Start GSR Reading (Press Ctrl+C to stop) ---")
-print("Timestamp | RawVal | Voltage(mV) | Skin_Conductance(uS) | Samples")
-time.sleep(1.0)
-
-accum_raw_medians = []
-accum_uv_medians = []
-accum_sample_count = 0
-loop_count = 0
-
+# Main execution loop supporting multiple workouts/sessions
 while True:
-    try:
-        raw_samples = []
-        uv_samples = []
-        
-        start_time = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), start_time) < 1000:
-            raw_samples.append(adc.read())
-            uv_samples.append(adc.read_uv())
+    # Show start menu and wait for KEY1 to start
+    show_menu_and_wait()
+
+    # Initialize log file name when calibration starts
+    LOG_FILE = generate_log_filename()
+    print("Logging to file:", LOG_FILE)
+
+    run_calibration()
+
+    print("\n--- Start GSR Reading (Press Ctrl+C to stop) ---")
+    print("Timestamp | RawVal | Voltage(mV) | Skin_Conductance(uS) | Samples")
+    time.sleep(1.0)
+
+    accum_raw_medians = []
+    accum_uv_medians = []
+    accum_sample_count = 0
+    loop_count = 0
+    countdown_seconds = None
+
+    session_active = True
+    while session_active:
+        try:
+            raw_samples = []
+            uv_samples = []
             
-            # Check display toggle
-            check_and_handle_display_toggle()
-            # Check for KEY2 button press to open menu
-            if key2_btn.value() == 0:
-                time.sleep_ms(50)  # Debounce
-                if key2_btn.value() == 0:
-                    if not display_on:
-                        print("[System] Turning display ON for menu...")
-                        enable_lcd_power()
-                        time.sleep_ms(50)
-                        init_lcd()
-                        bl.on()
-                        display_on = True
-                    
-                    choice = show_interrupt_menu()
-                    
-                    if choice == 0:
-                        # Continue logging
-                        print("[System] Resuming logging...")
-                        raw_samples = []
-                        uv_samples = []
-                        start_time = time.ticks_ms()
-                    elif choice == 1:
-                        # Recalibrate and restart logging from scratch
-                        print("[System] Recalibrating and restarting logging...")
-                        sweat_score = 0.0
-                        LOG_FILE = generate_log_filename()
-                        print("New log file:", LOG_FILE)
-                        run_calibration()
-                        accum_raw_medians = []
-                        accum_uv_medians = []
-                        accum_sample_count = 0
-                        loop_count = 0
-                        raw_samples = []
-                        uv_samples = []
-                        start_time = time.ticks_ms()
-            
-            time.sleep_ms(10)
-            
-        if len(raw_samples) > 0:
-            raw_median_1s = get_median_in_place(raw_samples)
-            voltage_mv_1s = get_median_in_place(uv_samples) / 1000.0
-        else:
-            raw_median_1s = 512.0
-            voltage_mv_1s = 2500.0
-            
-        adc_10bit_1s = int(voltage_mv_1s * 1023 / 5000.0)
-        denominator_1s = 512 - adc_10bit_1s
-        if denominator_1s > 0:
-            resistance_1s = ((1024 + 2 * adc_10bit_1s) * 10000) / denominator_1s
-            resistance_k_1s = resistance_1s / 1000.0
-            conductance_us_1s = 1000.0 / resistance_k_1s if resistance_k_1s > 0 else 0.0
-            res_str = "{:.2f}uS".format(conductance_us_1s)
-            connected = True
-        else:
-            res_str = "---"
-            connected = False
-            conductance_us_1s = 0.0
-            
-        if connected and baseline_cond_us is not None:
-            diff_1s = conductance_us_1s - baseline_cond_us
-            if diff_1s > 0:
-                sweat_score += diff_1s * 1.0
-            
-        accum_raw_medians.append(raw_median_1s)
-        accum_uv_medians.append(voltage_mv_1s * 1000.0)
-        accum_sample_count += len(raw_samples)
-        loop_count += 1
-        
-        if loop_count >= 10:
-            raw_median_10s = get_median_in_place(accum_raw_medians)
-            voltage_mv_10s = get_median_in_place(accum_uv_medians) / 1000.0
-            
-            adc_10bit_10s = int(voltage_mv_10s * 1023 / 5000.0)
-            denominator_10s = 512 - adc_10bit_10s
-            if denominator_10s > 0:
-                resistance_10s = ((1024 + 2 * adc_10bit_10s) * 10000) / denominator_10s
-                resistance_k_10s = resistance_10s / 1000.0
-                conductance_us_10s = 1000.0 / resistance_k_10s if resistance_k_10s > 0 else 0.0
-                log_res_str = "{:.3f} uS".format(conductance_us_10s)
-                if baseline_cond_us is not None:
-                    res_diff = conductance_us_10s - baseline_cond_us
-                    log_res_str += " (diff: {:+.3f} uS)".format(res_diff)
-            else:
-                log_res_str = "Out of Range (No Contact)"
+            start_time = time.ticks_ms()
+            while time.ticks_diff(time.ticks_ms(), start_time) < 1000:
+                raw_samples.append(adc.read())
+                uv_samples.append(adc.read_uv())
                 
-            raw_diff_10s = raw_median_10s - baseline_raw
+                # Check display toggle
+                check_and_handle_display_toggle()
+                # Check for KEY2 button press to open menu
+                if key2_btn.value() == 0:
+                    time.sleep_ms(50)  # Debounce
+                    if key2_btn.value() == 0:
+                        if not display_on:
+                            print("[System] Turning display ON for menu...")
+                            enable_lcd_power()
+                            time.sleep_ms(50)
+                            init_lcd()
+                            bl.on()
+                            display_on = True
+                        
+                        choice = show_interrupt_menu()
+                        
+                        if choice == 0:
+                            # Continue logging
+                            print("[System] Resuming logging...")
+                            raw_samples = []
+                            uv_samples = []
+                            start_time = time.ticks_ms()
+                        elif choice == 1:
+                            # Recalibrate and restart logging from scratch
+                            print("[System] Recalibrating and restarting logging...")
+                            countdown_seconds = None
+                            LOG_FILE = generate_log_filename()
+                            print("New log file:", LOG_FILE)
+                            run_calibration()
+                            accum_raw_medians = []
+                            accum_uv_medians = []
+                            accum_sample_count = 0
+                            loop_count = 0
+                            raw_samples = []
+                            uv_samples = []
+                            start_time = time.ticks_ms()
+                
+                time.sleep_ms(10)
+                
+            if len(raw_samples) > 0:
+                raw_median_1s = get_median_in_place(raw_samples)
+                voltage_mv_1s = get_median_in_place(uv_samples) / 1000.0
+            else:
+                raw_median_1s = 512.0
+                voltage_mv_1s = 2500.0
+                
+            adc_10bit_1s = int(voltage_mv_1s * 1023 / 5000.0)
+            denominator_1s = 512 - adc_10bit_1s
+            if denominator_1s > 0:
+                resistance_1s = ((1024 + 2 * adc_10bit_1s) * 10000) / denominator_1s
+                resistance_k_1s = resistance_1s / 1000.0
+                conductance_us_1s = 1000.0 / resistance_k_1s if resistance_k_1s > 0 else 0.0
+                res_str = "{:.2f}uS".format(conductance_us_1s)
+                connected = True
+            else:
+                res_str = "---"
+                connected = False
+                conductance_us_1s = 0.0
+                
+            if connected and baseline_cond_us is not None:
+                # Sweating is detected when conductance reaches 1.5 times the baseline
+                if conductance_us_1s >= 1.5 * baseline_cond_us:
+                    if countdown_seconds is None:
+                        countdown_seconds = 15 * 60
+                        print("[System] Sweating detected (conductance {:.2f} uS >= 1.5 * baseline {:.2f} uS). Starting 15-minute countdown.".format(conductance_us_1s, baseline_cond_us))
+
+            if countdown_seconds is not None:
+                if countdown_seconds > 0:
+                    countdown_seconds -= 1
+                    if countdown_seconds == 0:
+                        print("[System] Countdown reached 0. Alarm triggered!")
             
-            now = rtc.datetime()
-            timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
-                now[0], now[1], now[2], now[4], now[5], now[6]
-            )
+            # Check if alarm has triggered and handle rehydration menu
+            if countdown_seconds == 0:
+                if not display_on:
+                    print("[System] Turning display ON for alarm menu...")
+                    enable_lcd_power()
+                    time.sleep_ms(50)
+                    init_lcd()
+                    bl.on()
+                    display_on = True
+                
+                alarm_choice = show_alarm_menu()
+                if alarm_choice == 0:
+                    print("[System] Rehydrated. Continuing workout with a 30-minute periodic timer...")
+                    countdown_seconds = 30 * 60  # Set to 30 minutes (1800 seconds)
+                    # Reset raw/uv samples & start_time
+                    raw_samples = []
+                    uv_samples = []
+                    start_time = time.ticks_ms()
+                    continue
+                elif alarm_choice == 1:
+                    print("[System] Rehydrated. Ending workout...")
+                    session_active = False
+                    continue
+                
+            accum_raw_medians.append(raw_median_1s)
+            accum_uv_medians.append(voltage_mv_1s * 1000.0)
+            accum_sample_count += len(raw_samples)
+            loop_count += 1
             
-            # Add alarm tag to the log message if the threshold is crossed
-            alarm_tag = " [ALARM]" if sweat_score > 10000 else ""
-            log_line = "[{}]{} Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Conductance: {} | Sweat Score: {:.1f} | Baseline Raw: {:.1f} | Samples: {}".format(
-                timestamp, alarm_tag, raw_median_10s, raw_diff_10s, voltage_mv_10s, log_res_str, sweat_score, baseline_raw, accum_sample_count
-            )
-            print("[Log] " + log_line)
-            log_to_file(log_line)
-            
-            accum_raw_medians = []
-            accum_uv_medians = []
-            accum_sample_count = 0
-            loop_count = 0
-            
-        if display_on:
-            draw_screen(connected, conductance_us_1s, is_calibrating=False)
-            
-    except KeyboardInterrupt:
-        print("\nProgram stopped by user.")
-        break
-    except Exception as e:
-        print("Error during reading/display update:", e)
-        time.sleep(1.0)
+            if loop_count >= 10:
+                raw_median_10s = get_median_in_place(accum_raw_medians)
+                voltage_mv_10s = get_median_in_place(accum_uv_medians) / 1000.0
+                
+                adc_10bit_10s = int(voltage_mv_10s * 1023 / 5000.0)
+                denominator_10s = 512 - adc_10bit_10s
+                if denominator_10s > 0:
+                    resistance_10s = ((1024 + 2 * adc_10bit_10s) * 10000) / denominator_10s
+                    resistance_k_10s = resistance_10s / 1000.0
+                    conductance_us_10s = 1000.0 / resistance_k_10s if resistance_k_10s > 0 else 0.0
+                    log_res_str = "{:.3f} uS".format(conductance_us_10s)
+                    if baseline_cond_us is not None:
+                        res_diff = conductance_us_10s - baseline_cond_us
+                        log_res_str += " (diff: {:+.3f} uS)".format(res_diff)
+                else:
+                    log_res_str = "Out of Range (No Contact)"
+                    
+                raw_diff_10s = raw_median_10s - baseline_raw
+                
+                now = rtc.datetime()
+                timestamp = "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
+                    now[0], now[1], now[2], now[4], now[5], now[6]
+                )
+                
+                # Add alarm tag to the log message if the countdown has reached 0
+                alarm_tag = " [ALARM]" if countdown_seconds == 0 else ""
+                timer_log_str = "Off" if countdown_seconds is None else "{:02d}:{:02d}".format(countdown_seconds // 60, countdown_seconds % 60)
+                log_line = "[{}]{} Raw: {:4.1f} (diff: {:+5.1f}) | Voltage: {:.2f} mV | Conductance: {} | Timer: {} | Baseline Raw: {:.1f} | Samples: {}".format(
+                    timestamp, alarm_tag, raw_median_10s, raw_diff_10s, voltage_mv_10s, log_res_str, timer_log_str, baseline_raw, accum_sample_count
+                )
+                print("[Log] " + log_line)
+                log_to_file(log_line)
+                
+                accum_raw_medians = []
+                accum_uv_medians = []
+                accum_sample_count = 0
+                loop_count = 0
+                
+            if display_on:
+                draw_screen(connected, conductance_us_1s, is_calibrating=False)
+                
+        except KeyboardInterrupt:
+            print("\nProgram stopped by user.")
+            session_active = False
+            raise KeyboardInterrupt
+        except Exception as e:
+            print("Error during reading/display update:", e)
+            time.sleep(1.0)

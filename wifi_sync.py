@@ -100,9 +100,23 @@ def connect_wifi_and_sync_time(rtc):
         
     show_boot_screen("CONNECTING...", progress=30)
     
-    wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
-    wlan.connect(ssid, password)
+    try:
+        wlan = network.WLAN(network.STA_IF)
+        wlan.active(True)
+        wlan.connect(ssid, password)
+    except Exception as e:
+        print("WiFi initialization or connection failed with error:", e)
+        results = [
+            ("WIFI", "ERR", 0xF800),
+            ("TIME", "SKIP", 0xFDA0)
+        ]
+        show_boot_screen("ERROR", results=results)
+        try:
+            wlan.active(False)
+        except Exception:
+            pass
+        time.sleep(2.0)
+        return
     
     connected = False
     for i in range(15):

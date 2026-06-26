@@ -24,6 +24,7 @@ Connect the GSR sensor to the Grove port (Port A) of the M5StickS3.
 * **[sync.py](file:///home/karube/GitHub/M5StickS3/sync.py)**: An automation script to write source files from the development PC to the M5StickS3 for synchronization. The newly separated `pmic_lcd.py` and `wifi_sync.py` are also automatically included in the sync targets.
 * **[pull_logs.py](file:///home/karube/GitHub/M5StickS3/pull_logs.py)**: A host script to retrieve log files (`*.log`, `*.log.bak`) from the M5StickS3's internal flash memory to the PC. It saves files with automatically appended timestamps.
 * **[clear_logs.py](file:///home/karube/GitHub/M5StickS3/clear_logs.py)**: A host script to delete all log files (`*.log`, `*.log.bak`) from the M5StickS3's internal flash memory to free up storage space.
+* **[test_alarm.py](file:///home/karube/GitHub/M5StickS3/test_alarm.py)**: A standalone test script to render and test the Alarm Rehydration Menu layout and button controls on the physical M5StickS3 screen.
 
 ---
 
@@ -152,7 +153,7 @@ This project allows you to turn off the screen and shift the microcontroller to 
 
 ---
 
-## 9. Measurement Enhancements (Median Filter & Sweat Score)
+## 9. Measurement Enhancements (Median Filter & Sweat Detection/Countdown)
 
 This project features two significant enhancements to improve data reliability and utility:
 
@@ -163,11 +164,20 @@ Due to hardware factors like power supply ripples from the 5V PMIC boost, WiFi t
 * **1-Second Real-Time Display**: Collects raw/voltage samples for 1 second (~100 samples), computes their median, and calculates the skin conductance displayed on the screen.
 * **10-Second Log**: Collects the 1-second medians over 10 seconds and takes the median of those 10 values to write to the log. This double-layer filtering ensures extremely stable logged values.
 
-### Sweat Score
-To quantify cumulative sweat activity over time, a unique **Sweat Score** is integrated.
-* **Calculation**: Every second, the excess conductance above the baseline ($\max(0, \text{conductance\_us} - \text{baseline\_cond\_us})$) is integrated over time ($\Delta t = 1$s).
-* **Display**: Shown on the LCD screen as `Score: X.X` in cyan (y=158). When the score exceeds 10000.0, a prominent visual alarm is triggered: the header title changes to a flashing `"!!! ALARM !!!"` (flashing red and dark red), the score text color flashes red and yellow, and a flashing thick red border is drawn around the entire screen.
-* **Logging**: Appended to the 10-second interval log files as `Sweat Score: X.X`. If the score exceeds 10000.0, an `[ALARM]` tag is appended right after the timestamp (e.g., `[YYYY-MM-DD hh:mm:ss] [ALARM] Raw: ...`).
+### Sweat Detection and Countdown
+To monitor sweat activity, a **Sweat Detection and Countdown** system is integrated.
+* **Detection**: Sweating is detected if the current skin conductance reaches 1.5 times the established baseline conductance (`conductance_us_1s >= 1.5 * baseline_cond_us`).
+* **Display (Premium Redesign)**: To maximize readability during workouts, the traditional real-time clock and date display have been replaced with a dedicated, large countdown timer in the footer.
+  * **Standby State**: Displays `STANDBY` in a medium font size before sweating is detected.
+  * **Countdown State**: Displays the remaining time (e.g. `15:00` or `30:00`) in a large font size (`scale=3`). The UI dynamically changes colors and labels based on remaining time:
+    * *Normal (Time > 3 min)*: Cyan text with a `COUNTDOWN` label.
+    * *Warning (3 min >= Time > 1 min)*: Orange text with a `HURRY UP` label.
+    * *Critical (Time <= 1 min)*: Red text with a `REHYDRATE NOW` label.
+  * **Alarm State (Time = 00:00)**: Triggers a prominent visual alert. In addition to a flashing red border and a flashing `"!!! ALARM !!!"` header, the entire footer background flashes red/black and the timer text flashes red/white.
+* **Modernized UI elements**:
+  * **Connection HUD**: The connection status bar is updated to a modern panel with a dark gray border and a dedicated LED-like status dot (green for connected, red for no contact).
+  * **Spacing**: Redundant small timer labels were removed, and the vertical padding for the baseline and difference conductance values was optimized to prevent a cramped look.
+* **Logging**: Appended to the 10-second interval log files as `Timer: MM:SS` (or `Timer: Off`). If the countdown has reached `00:00`, an `[ALARM]` tag is appended right after the timestamp (e.g., `[YYYY-MM-DD hh:mm:ss] [ALARM] Raw: ...`).
 
 ---
 
@@ -178,15 +188,37 @@ This project features a system interrupt menu that can be accessed during loggin
 * **Triggering the Menu**:
   * Press the **KEY 2** button (GPIO 12) during logging to interrupt the operation and open the menu. If the display was turned off (power saving mode), it will be turned back on automatically.
 * **Menu Options**:
-  1. **Continue**: Resume the logging session seamlessly without losing any previous data or resetting the sweat score.
-  2. **Recalibrate**: Clear all accumulators, reset the sweat score to `0.0`, generate a new log file name, perform the 60-second calibration process again, and start a fresh logging session.
+  1. **Continue**: Resume the logging session seamlessly without losing any previous data or resetting the countdown.
+  2. **Recalibrate**: Clear all accumulators, reset the countdown timer to `None` (`Off`), generate a new log file name, perform the 60-second calibration process again, and start a fresh logging session.
 * **Menu Controls**:
   * **Select/Cycle Options**: Press the **KEY 2** button.
   * **Confirm/Execute Selection**: Press the **KEY 1** (M5 front) button.
 
 ---
 
-## 11. Troubleshooting
+## 11. Alarm Rehydration Menu
+
+When the countdown timer reaches `00:00` and the alarm triggers, the system automatically turns on the screen (if off) and presents the **Alarm Rehydration Menu**. This menu blocks further logging operations until the user confirms they have rehydrated.
+
+* **Menu Options**:
+  1. **Rehydrate & Continue**: Reset the countdown timer to **30 minutes** (`30:00`) and resume the current logging session. This initiates a periodic timer that will alert you to rehydrate and check whether to continue every 30 minutes thereafter.
+  2. **Rehydrate & End Workout**: End the current logging session, close the log file, and return the system to the standby **START MENU** to prepare for a new session.
+* **Menu Controls**:
+  * **Select/Cycle Options**: Press the **KEY 2** button.
+  * **Confirm/Execute Selection**: Press the **KEY 1** (M5 front) button.
+* **Testing the Alarm Screen**:
+  * You can test this screen instantly on the device by syncing and running the `test_alarm.py` script:
+    ```bash
+    # Synchronize the files to the device
+    ./sync.py
+    
+    # Run the test script using mpremote
+    .venv/bin/python -m mpremote run test_alarm.py
+    ```
+
+---
+
+## 12. Troubleshooting
 
 ### Error: `Failed to connect. The port is currently in use`
 Another program, such as the Thonny IDE, may have left a connection open to `/dev/ttyACM0`.
