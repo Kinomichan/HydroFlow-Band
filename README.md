@@ -148,7 +148,7 @@ This project allows you to turn off the screen and shift the microcontroller to 
   * **Cutting LCD Power Rail**: Controls registers of the PMIC (PY32L020) via I2C to completely cut power supply to the LCD module itself.
   * **Reducing CPU Load**: While the screen is OFF, memory-intensive framebuffer processing and drawing transmission via the SPI bus are skipped to minimize the processing load on the ESP32-S3.
 * **Power Button Customization**:
-  * Normally on the M5StickS3, a short press of the power button resets the device, and a double-click causes shutdown. However, by rewriting the PMIC registers (`0x49` and `0x4A`) at startup, these hardware behaviors are disabled, allowing it to be reused as a user input button just like KEY1.
+  * Normally on the M5StickS3, a short press of the power button resets the device, and a double-click causes shutdown. However, by rewriting the PMIC registers (`0x49` and `0x4A`) at startup, these hardware behaviors are disabled, allowing it to be reused as a user input button just like the M5 Button.
   * The physical emergency shutdown function via a long press (4 seconds or more) remains active for safety.
 
 ---
@@ -187,7 +187,7 @@ To monitor sweat activity, a **Sweat Detection and Countdown** system is integra
     # Run the countdown test script using mpremote
     .venv/bin/python -m mpremote run test_countdown.py
     ```
-  * During the test, you can hold **KEY 1** (M5 front button) to **fast-forward** (x30 speed) or hold **KEY 2** (Side button) to **pause** the countdown.
+  * During the test, you can hold the **M5 Button** (Front) to **fast-forward** (x30 speed) or hold the **KEY Button** (Side) to **pause** the countdown.
 
 ---
 
@@ -196,13 +196,14 @@ To monitor sweat activity, a **Sweat Detection and Countdown** system is integra
 This project features a system interrupt menu that can be accessed during logging. This allows you to pause the logging sequence, continue, or reset and recalibrate the system.
 
 * **Triggering the Menu**:
-  * Press the **KEY 2** button (GPIO 12) during logging to interrupt the operation and open the menu. If the display was turned off (power saving mode), it will be turned back on automatically.
+  * Press the **KEY Button** (GPIO 12) during logging to interrupt the operation and open the menu. If the display was turned off (power saving mode), it will be turned back on automatically.
 * **Menu Options**:
   1. **Continue**: Resume the logging session seamlessly without losing any previous data or resetting the countdown.
   2. **Recalibrate**: Clear all accumulators, reset the countdown timer to `None` (`Off`), generate a new log file name, perform the 60-second calibration process again, and start a fresh logging session.
+  3. **Reboot**: Perform a hardware reset (`machine.reset()`) to reboot the M5StickS3 device.
 * **Menu Controls**:
-  * **Select/Cycle Options**: Press the **KEY 2** button.
-  * **Confirm/Execute Selection**: Press the **KEY 1** (M5 front) button.
+  * **Select/Cycle Options**: Press the **KEY Button**.
+  * **Confirm/Execute Selection**: Press the **M5 Button** (Front).
 
 ---
 
@@ -214,8 +215,8 @@ When the countdown timer reaches `00:00` and the alarm triggers, the system auto
   1. **Rehydrate & Continue**: Reset the countdown timer to **30 minutes** (`30:00`) and resume the current logging session. This initiates a periodic timer that will alert you to rehydrate and check whether to continue every 30 minutes thereafter.
   2. **Rehydrate & End Workout**: End the current logging session, close the log file, and return the system to the standby **START MENU** to prepare for a new session.
 * **Menu Controls**:
-  * **Select/Cycle Options**: Press the **KEY 2** button.
-  * **Confirm/Execute Selection**: Press the **KEY 1** (M5 front) button.
+  * **Select/Cycle Options**: Press the **KEY Button**.
+  * **Confirm/Execute Selection**: Press the **M5 Button** (Front).
 * **Testing the Alarm Screen**:
   * You can test this screen instantly on the device by syncing and running the `test_alarm.py` script:
     ```bash

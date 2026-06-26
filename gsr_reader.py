@@ -383,18 +383,19 @@ def run_calibration():
     log_to_file(log_line)
 
 def show_interrupt_menu():
-    """Displays the interrupt menu when KEY 2 button is pressed.
+    """Displays the interrupt menu when KEY Button is pressed.
     
     Allows the user to choose between:
     - Continue Logging (Option 0)
     - Calibrate & Restart (Option 1)
+    - Reboot Device (Option 2)
     
-    KEY 2 button: Cycles selection
-    KEY 1 button: Confirms selection
+    KEY button: Cycles selection
+    M5 button: Confirms selection
     """
     print("[System] Displaying interrupt menu.")
     
-    selected_option = 0  # 0: Continue Logging, 1: Calibrate & Restart
+    selected_option = 0  # 0: Continue Logging, 1: Calibrate & Restart, 2: Reboot Device
     
     # Wait until buttons are released first to prevent accidental instant select
     while key2_btn.value() == 0 or btn.value() == 0:
@@ -416,24 +417,29 @@ def show_interrupt_menu():
         # Option 1: Continue Logging
         opt1_color = 0xFFFF if selected_option == 0 else 0x8410
         opt1_bg = 0x18C3 if selected_option == 0 else 0x0000
-        fb.fill_rect(10, 54, width - 20, 30, opt1_bg)
-        fb.rect(10, 54, width - 20, 30, opt1_color)
-        fb.text("Continue", 20, 60, opt1_color)
-        fb.text("Logging", 20, 72, opt1_color)
+        fb.fill_rect(10, 44, width - 20, 28, opt1_bg)
+        fb.rect(10, 44, width - 20, 28, opt1_color)
+        fb.text("Continue Log", 20, 54, opt1_color)
         
-        # Option 2: Calibrate & Restart
+        # Option 2: Recalibrate & Restart
         opt2_color = 0xFFFF if selected_option == 1 else 0x8410
         opt2_bg = 0x18C3 if selected_option == 1 else 0x0000
-        fb.fill_rect(10, 104, width - 20, 42, opt2_bg)
-        fb.rect(10, 104, width - 20, 42, opt2_color)
-        fb.text("Recalibrate", 20, 110, opt2_color)
-        fb.text("& Restart", 20, 122, opt2_color)
-        fb.text("From Scratch", 20, 134, opt2_color)
+        fb.fill_rect(10, 80, width - 20, 36, opt2_bg)
+        fb.rect(10, 80, width - 20, 36, opt2_color)
+        fb.text("Recalibrate", 20, 85, opt2_color)
+        fb.text("& Restart", 20, 98, opt2_color)
+        
+        # Option 3: Reboot Device
+        opt3_color = 0xFFFF if selected_option == 2 else 0x8410
+        opt3_bg = 0x18C3 if selected_option == 2 else 0x0000
+        fb.fill_rect(10, 124, width - 20, 28, opt3_bg)
+        fb.rect(10, 124, width - 20, 28, opt3_color)
+        fb.text("Reboot Device", 20, 134, opt3_color)
         
         # Footer instruction
         fb.line(0, 175, width, 175, 0x4208)
-        fb.text("KEY2: Select", (width - 12 * 8) // 2, 190, 0xFDA0) # Orange
-        fb.text("KEY1: Confirm", (width - 13 * 8) // 2, 208, 0x8410) # Gray
+        fb.text("KEY: Select", (width - 11 * 8) // 2, 190, 0xFDA0) # Orange
+        fb.text("M5: Confirm", (width - 11 * 8) // 2, 208, 0x8410) # Gray
         
         # Flush to screen
         swap_bytes(fb_buf, buf_size)
@@ -456,7 +462,7 @@ def show_interrupt_menu():
         
         if key2_pressed and time.ticks_diff(now, last_action_time) > 300:
             last_action_time = now
-            selected_option = 1 - selected_option  # Toggle between 0 and 1
+            selected_option = (selected_option + 1) % 3  # Cycle between 0, 1, 2
             draw_menu_options()
             # Wait for button release
             while key2_btn.value() == 0:
@@ -527,8 +533,8 @@ def show_alarm_menu():
         
         # Footer instruction
         fb.line(0, 175, width, 175, 0x4208)
-        fb.text("KEY2: Select", (width - 12 * 8) // 2, 190, 0xFDA0) # Orange
-        fb.text("KEY1: Confirm", (width - 13 * 8) // 2, 208, 0x8410) # Gray
+        fb.text("KEY: Select", (width - 11 * 8) // 2, 190, 0xFDA0) # Orange
+        fb.text("M5: Confirm", (width - 11 * 8) // 2, 208, 0x8410) # Gray
         
         # Flush to screen
         swap_bytes(fb_buf, buf_size)
@@ -622,7 +628,7 @@ def show_menu_and_wait():
     # Draw the initial screen immediately
     draw_menu()
     
-    # Simple loop to wait for KEY1 press (low signal)
+    # Simple loop to wait for M5 Button press (low signal)
     # Debounce: wait for button to be released if it was already pressed
     while btn.value() == 0:
         time.sleep_ms(10)
@@ -680,7 +686,7 @@ def show_menu_and_wait():
 
 # Main execution loop supporting multiple workouts/sessions
 while True:
-    # Show start menu and wait for KEY1 to start
+    # Show start menu and wait for M5 Button to start
     show_menu_and_wait()
 
     # Initialize log file name when calibration starts
@@ -746,6 +752,11 @@ while True:
                             raw_samples = []
                             uv_samples = []
                             start_time = time.ticks_ms()
+                        elif choice == 2:
+                            # Reboot device
+                            print("[System] Rebooting device...")
+                            import machine
+                            machine.reset()
                 
                 time.sleep_ms(10)
                 

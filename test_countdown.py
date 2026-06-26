@@ -136,8 +136,8 @@ init_lcd()
 bl.on()
 
 print("\n=== 15-Minute Countdown Test Program ===")
-print("  - KEY 1 (M5 Button): Hold to FAST FORWARD (x30 speed)")
-print("  - KEY 2 (Side Button): Hold to PAUSE")
+print("  - M5 Button (Front): Hold to FAST FORWARD (x30 speed)")
+print("  - KEY Button (Side): Hold to PAUSE")
 print("  - Ctrl+C to terminate test\n")
 
 last_time = time.ticks_ms()
@@ -149,8 +149,8 @@ try:
         draw_screen(True, conductance_us, countdown_seconds)
         
         # Check buttons
-        key1_pressed = (btn.value() == 0)      # M5 front button (Btn A)
-        key2_pressed = (key2_btn.value() == 0) # Side button (Btn B)
+        key1_pressed = (btn.value() == 0)      # M5 Button (Front)
+        key2_pressed = (key2_btn.value() == 0) # KEY Button (Side)
         
         # Decrement countdown
         if time.ticks_diff(current_time, last_time) >= 1000:

@@ -28,8 +28,8 @@ def show_alarm_menu():
     - Rehydrate & Continue (Option 0)
     - Rehydrate & End Workout (Option 1)
     
-    KEY 2 button: Cycles selection
-    KEY 1 button: Confirms selection
+    KEY Button: Cycles selection
+    M5 Button: Confirms selection
     """
     print("[System] Displaying alarm rehydration menu.")
     
@@ -77,8 +77,8 @@ def show_alarm_menu():
         
         # Footer instruction
         fb.line(0, 175, width, 175, 0x4208)
-        fb.text("KEY2: Select", (width - 12 * 8) // 2, 190, 0xFDA0) # Orange
-        fb.text("KEY1: Confirm", (width - 13 * 8) // 2, 208, 0x8410) # Gray
+        fb.text("KEY: Select", (width - 11 * 8) // 2, 190, 0xFDA0) # Orange
+        fb.text("M5: Confirm", (width - 11 * 8) // 2, 208, 0x8410) # Gray
         
         # Flush to screen
         swap_bytes(fb_buf, buf_size)
@@ -127,7 +127,7 @@ time.sleep_ms(50)
 init_lcd()
 bl.on()
 
-print("[Test] Starting alarm menu test. Press KEY2 to cycle, KEY1 to select.")
+print("[Test] Starting alarm menu test. Press KEY to cycle, M5 to select.")
 choice = show_alarm_menu()
 
 if choice == 0:
