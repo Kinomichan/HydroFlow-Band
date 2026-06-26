@@ -178,6 +178,16 @@ To monitor sweat activity, a **Sweat Detection and Countdown** system is integra
   * **Connection HUD**: The connection status bar is updated to a modern panel with a dark gray border and a dedicated LED-like status dot (green for connected, red for no contact).
   * **Spacing**: Redundant small timer labels were removed, and the vertical padding for the baseline and difference conductance values was optimized to prevent a cramped look.
 * **Logging**: Appended to the 10-second interval log files as `Timer: MM:SS` (or `Timer: Off`). If the countdown has reached `00:00`, an `[ALARM]` tag is appended right after the timestamp (e.g., `[YYYY-MM-DD hh:mm:ss] [ALARM] Raw: ...`).
+* **Testing the Countdown Display**:
+  * You can test the 15-minute countdown and its visual transitions instantly on the device using the `test_countdown.py` script:
+    ```bash
+    # Synchronize the files to the device
+    ./sync.py
+    
+    # Run the countdown test script using mpremote
+    .venv/bin/python -m mpremote run test_countdown.py
+    ```
+  * During the test, you can hold **KEY 1** (M5 front button) to **fast-forward** (x30 speed) or hold **KEY 2** (Side button) to **pause** the countdown.
 
 ---
 
