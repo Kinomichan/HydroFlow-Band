@@ -88,7 +88,7 @@ def connect_wifi_and_sync_time(rtc):
     password = config.get("password", "")
     timezone_offset_hours = config.get("timezone_offset_hours", 0)
     
-    if ssid in ("YOUR_WIFI_SSID", "Not Connected") or not ssid:
+    if ssid == "YOUR_WIFI_SSID" or not ssid:
         print("SSID is not configured. Skipping WiFi/NTP sync.")
         results = [
             ("WIFI", "SKIP", 0xFDA0),
